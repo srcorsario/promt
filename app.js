@@ -1,5 +1,20 @@
-// Cargar las últimas URLs usadas al iniciar la página
+// Variable que controla la versión del script lógico
+const VER_APP = "2.1.0";
+
+// Variables globales para la cola de copiado
+let promptsFinalesListos = [];
+
+// Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
+    // Renderizar versión visualmente
+    const versionBadgeApp = document.getElementById('versionApp');
+    if (versionBadgeApp) {
+        versionBadgeApp.innerText = `App: v${VER_APP}`;
+    }
+
+    // Inicializar historial de repositorios
+    actualizarDesplegableHistorial();
+
     const urlGuardada = localStorage.getItem('last_github_repo');
     if (urlGuardada) {
         document.getElementById('repoUrl').value = urlGuardada;
@@ -13,6 +28,83 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('limitSelect').value = limitGuardado;
     }
 });
+
+// Lógica de gestión del historial en LocalStorage
+function guardarEnHistorial(url) {
+    if (!url) return;
+    let historial = JSON.parse(localStorage.getItem('github_repo_history') || '[]');
+    
+    // Filtrar si ya existe para enviarla al inicio de la lista
+    historial = historial.filter(item => item !== url);
+    historial.unshift(url);
+    
+    // Guardar únicamente los últimos 8 repositorios
+    historial = historial.slice(0, 8);
+    localStorage.setItem('github_repo_history', JSON.stringify(historial));
+    actualizarDesplegableHistorial();
+}
+
+function actualizarDesplegableHistorial() {
+    const historial = JSON.parse(localStorage.getItem('github_repo_history') || '[]');
+    const select = document.getElementById('repoHistorySelect');
+    
+    if (!select) return;
+    
+    if (historial.length === 0) {
+        select.style.display = 'none';
+        return;
+    }
+    
+    // Resetear opciones manteniendo la inicial estática
+    select.innerHTML = '<option value="" disabled selected>📂 Historial de repositorios usados...</option>';
+    
+    historial.forEach(url => {
+        const option = document.createElement('option');
+        option.value = url;
+        option.innerText = url.replace('https://github.com/', '');
+        select.appendChild(option);
+    });
+    
+    select.style.display = 'block';
+    
+    // Listener para rellenar el input al seleccionar una opción
+    select.onchange = (e) => {
+        if (e.target.value) {
+            document.getElementById('repoUrl').value = e.target.value;
+        }
+    };
+}
+
+// Función limpia para resetear toda la interfaz (Trabajo anterior)
+function limpiarInterfaz() {
+    // Limpiar inputs de texto
+    document.getElementById('repoUrl').value = '';
+    document.getElementById('repoUrlSecundario').value = '';
+    document.getElementById('instrucciones').value = '';
+    
+    // Ocultar contenedores de prompts y vistas previas
+    document.getElementById('previewBox').style.display = "none";
+    document.getElementById('queueContainer').style.display = "none";
+    
+    // Resetear estados del estado/loader
+    const status = document.getElementById('statusCarga');
+    status.style.display = "none";
+    status.innerText = "";
+    
+    // Alternar visibilidad de botones (Ocultar reset, mostrar Generar limpio)
+    const btnGenerar = document.getElementById('btnGenerar');
+    btnGenerar.disabled = false;
+    btnGenerar.innerText = "⚡ GENERAR PROMPTS";
+    btnGenerar.style.display = "block";
+    
+    document.getElementById('btnReset').style.display = "none";
+    
+    // Forzar actualización del selector de historial
+    actualizarDesplegableHistorial();
+    
+    // Scroll suave hacia arriba
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 // Función auxiliar para extraer datos de la URL de GitHub
 function parsearGitHubUrl(url) {
@@ -62,15 +154,13 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
     return { bloques, nombresArchivos };
 }
 
-// Variables globales para la nueva cola de copiado
-let promptsFinalesListos = [];
-
 async function construirSuperPrompt() {
     const urlInput = document.getElementById('repoUrl').value.trim();
     const urlSecundariaInput = document.getElementById('repoUrlSecundario').value.trim();
     const instrucciones = document.getElementById('instrucciones').value.trim();
     const MAX_CARACTERES_POR_PROMPT = parseInt(document.getElementById('limitSelect').value);
     const btn = document.getElementById('btnGenerar');
+    const btnReset = document.getElementById('btnReset');
     const status = document.getElementById('statusCarga');
     const previewBox = document.getElementById('previewBox');
     const listaArchivos = document.getElementById('listaArchivos');
@@ -83,11 +173,14 @@ async function construirSuperPrompt() {
         return;
     }
 
-    // Guardar preferencias en almacenamiento local
+    // Guardar preferencias en almacenamiento local e historial
     localStorage.setItem('last_github_repo', urlInput);
     localStorage.setItem('last_limit_select', MAX_CARACTERES_POR_PROMPT);
+    guardarEnHistorial(urlInput);
+    
     if (urlSecundariaInput) {
         localStorage.setItem('last_github_repo_secondary', urlSecundariaInput);
+        guardarEnHistorial(urlSecundariaInput);
     } else {
         localStorage.removeItem('last_github_repo_secondary');
     }
@@ -207,9 +300,12 @@ async function construirSuperPrompt() {
         // --- RENDERIZADO DE LA NUEVA COLA DE COPIADO ---
         status.style.color = "#10b981";
         status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
-        btn.innerText = `🔄 REGENERAR PROMPTS`;
-        btn.disabled = false;
-        btn.onclick = () => location.reload();
+        
+        // Transformamos el botón para guiar al usuario a limpiar/reiniciar cuando acabe
+        btn.innerText = "✅ COLA LISTA";
+        btn.disabled = true;
+        btn.style.display = "none"; // Ocultamos generar para priorizar el flujo de limpieza
+        btnReset.style.display = "block"; // Mostramos el botón de limpieza de interfaz
         
         previewBox.style.display = "block";
         listaArchivos.innerHTML = htmlPreviewArchivos + 
@@ -240,6 +336,7 @@ async function construirSuperPrompt() {
         status.innerText = `❌ Error: ${e.message}`;
         console.error(e);
         btn.disabled = false;
+        btn.innerText = "⚡ GENERAR PROMPTS";
     }
 }
 
