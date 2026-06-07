@@ -17,6 +17,7 @@ const PLANTILLAS_ORDENES = {
  * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTICAMENTE)
  * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
  */
+
 const REGLAS_EMPAQUETADO_SISTEMA = 
 `\n\n=========================================\n` +
 `NORMAS DE SALIDA OBLIGATORIAS PARA LA IA:\n` +
@@ -24,7 +25,11 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `1. Cuando respondas implementando el OBJETIVO o procesando los archivos, debes devolver los ARCHIVOS MODIFICADOS EN SU TOTALIDAD (Código completo, sin recortes, sin omitir funciones funcionales y sin usar comentarios del tipo '// ... resto del código').\n` +
 `2. Si un archivo provisto en el contexto NO necesita sufrir modificaciones para cumplir el objetivo, NO muestres su código. Simplemente indica de forma clara y breve: "El archivo [nombre_archivo] no requiere modificaciones".\n` +
 `3. No reescribas ni alteres la lógica de los componentes que ya funcionan a menos que sea estrictamente necesario para cumplir el objetivo solicitado.\n` +
-`4. Cada vez que proveas un código modificado, lista de manera clara los elementos agregados o eliminados en comparación con la versión que te fue entregada.`;
+`4. Cada vez que proveas un código modificado, lista de manera clara los elementos agregados o eliminados en comparación con la versión que te fue entregada.\n` +
+`5. PRESERVACIÓN DE IDENTIFICADORES: Está estrictamente prohibido renombrar funciones, variables, identificadores HTML (id), clases CSS o claves de almacenamiento (localStorage) existentes. Mantén intacta la nomenclatura original.\n` +
+`6. ENTORNO TECNOLÓGICO: Resuelve el objetivo utilizando exclusivamente las tecnologías nativas provistas (Vanilla JS, CSS nativo, etc.). No inventes dependencias ni asumas la existencia de librerías externas que no veas explícitamente en el contexto.\n` +
+`7. MODULARIDAD SEGURA: Cualquier lógica nueva debe aislarse correctamente y no debe interferir con los listeners de ciclo de vida (como DOMContentLoaded) ni con las variables globales del sistema.\n` +
+`8. SALIDA DIRECTA Y COMPACTA: Entrega los resultados estructurados en bloques de código Markdown limpios. Evita textos introductorios densos, rodeos teóricos o saludos; prioriza la legibilidad y la velocidad de copiado.`;
 
 // Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
