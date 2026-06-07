@@ -59,14 +59,33 @@
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
-        .url-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+
+        /* Configuración de la barra superior de herramientas compactas */
+        .top-tools-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            flex-wrap: wrap;
         }
-        @media (max-width: 768px) {
-            .url-grid { grid-template-columns: 1fr; gap: 0; }
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+        .tool-item label {
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+
+        /* Estructura vertical limpia para los inputs de repositorios */
+        .input-vertical-group {
+            margin-bottom: 15px;
+        }
+        
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #cbd5e1; font-size: 0.9rem; }
         input[type="text"], textarea, select {
             width: 100%;
@@ -77,14 +96,24 @@
             border-radius: 8px;
             color: white;
             font-family: inherit;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         select { cursor: pointer; }
+        
+        /* Selectores pequeños específicos de herramientas superiores */
+        .top-tools-bar select {
+            width: auto;
+            margin-bottom: 0;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
         textarea { 
-            height: 180px; /* Altura optimizada para dar espacio a la cabecera sin perder comodidad */
+            height: 180px;
             resize: vertical; 
             font-size: 1.05rem;
             line-height: 1.5;
+            margin-bottom: 15px;
         }
         
         .btn-group {
@@ -110,9 +139,7 @@
             background: #334155;
             color: white;
         }
-        #btnReset:hover {
-            background: #475569;
-        }
+        #btnReset:hover { background: #475569; }
 
         .status {
             text-align: center;
@@ -138,20 +165,6 @@
             margin-bottom: 5px;
             font-weight: 700;
         }
-
-        /* --- Estilos Cola de Copiado --- */
-        .context-selector {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 20px;
-            background: #0f172a;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-        }
-        .context-selector label { margin: 0; font-size: 0.85rem; }
-        .context-selector select { margin: 0; width: auto; flex-grow: 1; }
 
         .queue-container { margin-top: 25px; }
         .queue-item {
@@ -180,38 +193,50 @@
         <h1>🚀 GitHub Prompt Helper</h1>
         <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
         <div class="version-container">
-            <span class="version-badge">Index: v2.1.0</span>
+            <span class="version-badge">Index: v2.2.0</span>
             <span class="version-badge" id="versionApp">App: Cargando...</span>
         </div>
     </div>
 
     <div class="box">
-        <div class="url-grid">
-            <div>
-                <label for="repoUrl">URL del Repositorio Principal (GitHub)</label>
-                <input type="text" id="repoUrl" placeholder="Ej: https://github.com/usuario/proyecto_principal">
-                <select id="repoHistorySelect" style="display: none; font-size: 0.85rem; margin-top: -5px;">
-                    <option value="" disabled selected>📂 Historial de repositorios usados...</option>
+        <div class="top-tools-bar">
+            <div class="tool-item">
+                <label for="limitSelect">🧠 Contexto:</label>
+                <select id="limitSelect">
+                    <option value="100000">Gemini 1.5 (100k)</option>
+                    <option value="60000">Claude 3.5 (60k)</option>
+                    <option value="30000">GPT-4o (30k)</option>
+                    <option value="15000" selected>Legacy (15k)</option>
                 </select>
             </div>
-            <div>
-                <label for="repoUrlSecundario">URL del Repositorio Secundario (Opcional)</label>
-                <input type="text" id="repoUrlSecundario" placeholder="Ej: https://github.com/usuario/proyecto_referencia">
+            <div class="tool-item">
+                <label for="ordenesPredeterminadas">📋 Orden Prefijada:</label>
+                <select id="ordenesPredeterminadas" onchange="aplicarOrdenPrefijada(this.value)">
+                    <option value="" selected disabled>Selecciona una instrucción rápida...</option>
+                    <option value="analizar">🔍 Analizar estructura y dependencias</option>
+                    <option value="bugs">🐛 Encontrar bugs y sugerir correcciones</option>
+                    <option value="refactor">⚡ Optimizar y refactorizar rendimiento</option>
+                    <option value="documentar">✍️ Generar documentación y JSDoc</option>
+                    <option value="test">🧪 Crear plan de pruebas unitarias</option>
+                </select>
             </div>
         </div>
 
-        <div class="context-selector">
-            <label>🧠 Tamaño de Contexto de tu IA:</label>
-            <select id="limitSelect">
-                <option value="100000">Gigante (Gemini 1.5 - 1 Sola Parte)</option>
-                <option value="60000">Grande (Claude 3.5 - Pocas Partes)</option>
-                <option value="30000">Mediano (GPT-4o Estándar)</option>
-                <option value="15000" selected>Pequeño (Modelos Antiguos - 15k chars)</option>
+        <div class="input-vertical-group">
+            <label for="repoUrl">URL del Repositorio Principal (GitHub)</label>
+            <input type="text" id="repoUrl" placeholder="Ej: https://github.com/usuario/proyecto_principal">
+            <select id="repoHistorySelect" style="display: none; font-size: 0.85rem; margin-top: 5px; margin-bottom: 5px;">
+                <option value="" disabled selected>📂 Historial de repositorios usados...</option>
             </select>
+        </div>
+
+        <div class="input-vertical-group">
+            <label for="repoUrlSecundario">URL del Repositorio Secundario (Opcional)</label>
+            <input type="text" id="repoUrlSecundario" placeholder="Ej: https://github.com/usuario/proyecto_referencia">
         </div>
         
         <label for="instrucciones">¿Qué le vas a pedir a la IA? (Escribe tu Prompt aquí)</label>
-        <textarea id="instrucciones" placeholder="Ej: Analiza el proyecto secundario e implementa la lógica de botones dinámicos en el archivo app.js del proyecto principal..."></textarea>
+        <textarea id="instrucciones" placeholder="Ej: Implementa la lógica solicitada o selecciona una 'Orden Prefijada' arriba..."></textarea>
         
         <div class="btn-group">
             <button id="btnGenerar" onclick="construirSuperPrompt()" style="flex: 2;">⚡ GENERAR PROMPTS</button>
