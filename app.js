@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.6.2 para cumplimiento estricto de integridad de archivos
-const VER_APP = "2.6.2"; 
+// MODIFICADO: Versión actualizada a v2.6.4 para añadir cálculo visual de tokens
+const VER_APP = "2.6.4"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -9,7 +9,7 @@ let promptsFinalesListos = [];
 const PLANTILLAS_ORDENES = {
     analizar: "Analiza detalladamente la arquitectura de este proyecto. Explica cómo se comunican los componentes, los flujos de datos principales y enumera las dependencias críticas detectadas.",
     bugs: "Revisa exhaustivamente todo el código provisto en busca de errores de lógica, fallas de seguridad potenciales, fugas de memoria o malas prácticas. Muestra los puntos críticos y propón sus correcciones exactas.",
-    refactor: "Actúa como un ingeniero de software expert en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
+    refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
     documentar: "Generar la documentación técnica correspondiente para las funciones y módulos clave de este repositorio. Añade comentarios claros y estructuras de tipo JSDoc/comentarios descriptivos donde falten.",
     test: "Examina los flujos lógicos y genera una estrategia integral de pruebas unitarias. Detalla qué casos de prueba y escenarios límite (edge cases) se deben validar de forma prioritaria en base a los archivos adjuntos."
 };
@@ -281,10 +281,17 @@ async function construirSuperPrompt() {
         if (totalPartes === 1) { copiarParte(0); } else {
             if (btnCopiarTodo) btnCopiarTodo.style.display = "block";
             promptsFinalesListos.forEach((_, index) => {
+                // NUEVO: Calculo aproximado de tokens para la parte actual
+                const textoParte = promptsFinalesListos[index];
+                const charCount = textoParte.length;
+                const minTokens = Math.round(charCount / 4);
+                const maxTokens = Math.round(charCount / 3);
+
                 const div = document.createElement('div');
                 div.className = 'queue-item';
                 div.id = `queue-item-${index}`;
-                div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes}</span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
+                // MODIFICADO: Inyección visual de los tokens aproximados al lado del número de parte
+                div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes} <span style="color:#94a3b8; font-size:0.85rem; font-weight:400;">(Entre ${minTokens.toLocaleString()}/${maxTokens.toLocaleString()} tokens aprox)</span></span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
                 partQueue.appendChild(div);
             });
         }
