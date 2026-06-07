@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt & GitHub Context Sync</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+            --green: #10b981;
+        }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+        h1 { text-align: center; color: var(--accent); font-size: 1.8rem; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #94a3b8; margin-top: 0; margin-bottom: 25px; }
+        
+        .box {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #cbd5e1; }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            box-sizing: border-box;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: white;
+            font-family: inherit;
+            margin-bottom: 15px;
+        }
+        textarea { height: 100px; resize: vertical; }
+        
+        button {
+            width: 100%;
+            background: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #7dd3fc; }
+        button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+        
+        .status {
+            text-align: center;
+            font-weight: 600;
+            margin: 10px 0;
+            color: var(--green);
+            display: none;
+        }
+        .file-tag {
+            display: inline-block;
+            background: #334155;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 4px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚀 GitHub Prompt Helper</h1>
+    <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
+
+    <div class="box">
+        <label for="repoUrl">URL del Repositorio de GitHub (Rama Principal)</label>
+        <input type="text" id="repoUrl" placeholder="Ej: https://github.com/srcorsario/Web_Editor_Pro/tree/main">
+        
+        <label for="instrucciones">¿Qué le vas a pedir a la IA? (Opcional)</label>
+        <textarea id="instrucciones" placeholder="Ej: Revisa por qué no cargan los datos o ayúdame a optimizar el CSS..."></textarea>
+        
+        <button id="btnGenerar" onclick="construirSúperPrompt()">⚡ GENERAR Y COPIAR PROMPT</button>
+        <div id="statusCarga" class="status"></div>
+    </div>
+
+    <div class="box" id="previewBox" style="display:none;">
+        <label>Archivos detectados e incluidos:</label>
+        <div id="listaArchivos"></div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
