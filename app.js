@@ -18,6 +18,11 @@ const PLANTILLAS_ORDENES = {
  * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
  */
 
+/**
+ * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTIMAMENTE)
+ * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
+ */
+
 const REGLAS_EMPAQUETADO_SISTEMA = 
 `\n\n=========================================\n` +
 `NORMAS DE SALIDA OBLIGATORIAS PARA LA IA:\n` +
@@ -30,10 +35,12 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `6. ENTORNO TECNOLÓGICO: Resuelve el objetivo utilizando exclusivamente las tecnologías nativas provistas (Vanilla JS, CSS nativo, etc.). No inventes dependencias ni asumas la existencia de librerías externas que no veas explícitamente en el contexto.\n` +
 `7. MODULARIDAD SEGURA: Cualquier lógica nueva debe aislarse correctamente y no debe interferir con los listeners de ciclo de vida (como DOMContentLoaded) ni con las variables globales del sistema.\n` +
 `8. SALIDA DIRECTA Y COMPACTA: Entrega los resultados estructurados en bloques de código Markdown limpios. Evita textos introductorios densos, rodeos teóricos o saludos; prioriza la legibilidad y la velocidad de copiado.\n` +
-`9. MANEJO DEFENSIVO DEL DOM: Antes de interactuar con elementos de la interfaz, valida su existencia (if (elemento)) para evitar excepciones en JS si la estructura cambia.\n` +
-`10. CONTROL DE LISTENERS: Diseña los manejadores de eventos de forma que no puedan registrarse duplicados ni generar fugas de memoria al reejecutar funciones.\n` +
-`11. INTEGRIDAD DEL ESTADO: Los cambios lógicos no deben resetear involuntariamente inputs, variables de estado activas o datos alojados en LocalStorage.\n` +
-`12. SEÑALIZACIÓN EN CÓDIGO: Inserta comentarios breves como '// NUEVO:' o '// MODIFICADO:' directamente sobre las líneas cambiadas dentro del bloque de código devuelto para facilitar su revisión.`;
+`9. MANEJO DEFENSIVO DEL DOM: Antes de interactuar con cualquier elemento de la interfaz (capturar valor, asignar texto o colgar listeners), valida obligatoriamente su existencia mediante condicionales (if (elemento)) para evitar excepciones que detengan la ejecución del script.\n` +
+`10. CONTROL DE LISTENERS: Diseña los manejadores de eventos de forma que no puedan registrarse duplicados ni generar fugas de memoria al reejecutar funciones. Evita registrar listeners estáticos de forma masiva dentro de funciones asíncronas o bucles de renderizado.\n` +
+`11. INTEGRIDAD DEL ESTADO: Los cambios lógicos no deben resetear, limpiar o alterar involuntariamente los inputs, textareas, variables de estado activas o datos antiguos alojados en LocalStorage, manteniendo la compatibilidad hacia atrás.\n` +
+`12. SEÑALIZACIÓN EN CÓDIGO: Inserta comentarios breves como '// NUEVO:' o '// MODIFICADO:' directamente sobre las líneas cambiadas dentro del bloque de código devuelto para facilitar su revisión visual rápida.\n` +
+`13. ATRIBUTOS INLINE EN HTML: Si una modificación en JavaScript altera la firma, parámetros o nombre de una función, es obligatorio actualizar en consecuencia todas sus llamadas interactivas inline correspondientes en el archivo HTML (como onclick u onchange).\n` +
+`14. RESTRICCIÓN DE ALCANCE QUIRÚRGICO: Respeta la arquitectura interna por bloques de funciones. Si el cambio solicitado afecta únicamente a un proceso aislado, limita las modificaciones estrictamente al interior de ese bloque; el resto de los bloques no afectados deben reescribirse de manera idéntica e intacta línea por línea.`;
 
 // Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
