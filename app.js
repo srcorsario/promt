@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (urlSecundariaGuardada) {
         document.getElementById('repoUrlSecundario').value = urlSecundariaGuardada;
     }
+    const limitGuardado = localStorage.getItem('last_limit_select');
+    if (limitGuardado) {
+        document.getElementById('limitSelect').value = limitGuardado;
+    }
 });
 
 // Función auxiliar para extraer datos de la URL de GitHub
@@ -58,28 +62,30 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
     return { bloques, nombresArchivos };
 }
 
-// Auxiliar para limpiar strings de CSV si fuera necesario
-function superLimpiar(texto) {
-    if (!texto) return "";
-    return texto.trim().replace(/^"|"$/g, '');
-}
+// Variables globales para la nueva cola de copiado
+let promptsFinalesListos = [];
 
 async function construirSúperPrompt() {
     const urlInput = document.getElementById('repoUrl').value.trim();
     const urlSecundariaInput = document.getElementById('repoUrlSecundario').value.trim();
     const instrucciones = document.getElementById('instrucciones').value.trim();
+    const MAX_CARACTERES_POR_PROMPT = parseInt(document.getElementById('limitSelect').value);
     const btn = document.getElementById('btnGenerar');
     const status = document.getElementById('statusCarga');
     const previewBox = document.getElementById('previewBox');
     const listaArchivos = document.getElementById('listaArchivos');
+    const queueContainer = document.getElementById('queueContainer');
+    const partQueue = document.getElementById('partQueue');
+    const btnCopiarTodo = document.getElementById('btnCopiarTodo');
 
     if (!urlInput) {
         alert("Por favor, introduce una URL de GitHub principal.");
         return;
     }
 
-    // Guardar URLs en almacenamiento local
+    // Guardar preferencias en almacenamiento local
     localStorage.setItem('last_github_repo', urlInput);
+    localStorage.setItem('last_limit_select', MAX_CARACTERES_POR_PROMPT);
     if (urlSecundariaInput) {
         localStorage.setItem('last_github_repo_secondary', urlSecundariaInput);
     } else {
@@ -89,7 +95,7 @@ async function construirSúperPrompt() {
     // Procesar repositorio principal
     const datosRepoPrincipal = parsearGitHubUrl(urlInput);
     if (!datosRepoPrincipal) {
-        alert("Formato de URL principal no reconocido. Asegúrate de que sea una URL válida de GitHub.");
+        alert("Formato de URL principal no reconocido.");
         return;
     }
 
@@ -98,7 +104,7 @@ async function construirSúperPrompt() {
     if (urlSecundariaInput) {
         datosRepoSecundario = parsearGitHubUrl(urlSecundariaInput);
         if (!datosRepoSecundario) {
-            alert("Formato de URL secundaria no reconocido. Asegúrate de que sea una URL válida de GitHub.");
+            alert("Formato de URL secundaria no reconocido.");
             return;
         }
     }
@@ -136,7 +142,6 @@ async function construirSúperPrompt() {
         status.innerText = "⏳ Armando secuencia de prompts...";
 
         // --- LÓGICA DE SEGMENTACIÓN EN VARIOS PROMPTS ---
-        const MAX_CARACTERES_POR_PROMPT = 15000;
         let listaPromptsAGenerar = [];
         let acumuladorBloquesTexto = "";
 
@@ -152,8 +157,8 @@ async function construirSúperPrompt() {
             listaPromptsAGenerar.push(acumuladorBloquesTexto);
         }
 
-        // --- CONSTRUCCIÓN DE LA SECUENCIA DE COPIADO ---
-        let promptsFinalesListos = [];
+        // --- CONSTRUCCIÓN DE LA SECUENCIA FINAL ---
+        promptsFinalesListos = [];
         const totalPartes = listaPromptsAGenerar.length;
 
         listaPromptsAGenerar.forEach((contenidoCodigo, index) => {
@@ -199,51 +204,97 @@ async function construirSúperPrompt() {
             promptsFinalesListos.push(textoPrompt);
         });
 
-        // Configurar el asistente de copiado en el botón
-        let parteActualParaCopiar = 0;
-
-        const gestionarCopiadoSecuencial = async () => {
-            if (parteActualParaCopiar < totalPartes) {
-                await navigator.clipboard.writeText(promptsFinalesListos[parteActualParaCopiar]);
-                parteActualParaCopiar++;
-                
-                if (parteActualParaCopiar < totalPartes) {
-                    status.style.color = "#38bdf8";
-                    status.innerText = `📋 Parte ${parteActualParaCopiar} copiada. Haz clic de nuevo para copiar la Parte ${parteActualParaCopiar + 1}/${totalPartes}`;
-                    btn.innerText = `📋 COPIAR PARTE ${parteActualParaCopiar + 1} DE ${totalPartes}`;
-                } else {
-                    status.style.color = "#10b981";
-                    status.innerText = `✨ ¡Todas las partes (${totalPartes}/${totalPartes}) han sido copiadas e introducidas!`;
-                    btn.innerText = `⚡ REGENERAR PROMPTS`;
-                    btn.onclick = () => location.reload();
-                }
-            }
-        };
-
-        // Copiar la primera parte de forma automática inmediatamente
-        await navigator.clipboard.writeText(promptsFinalesListos[0]);
-        parteActualParaCopiar = 1;
-
-        if (totalPartes > 1) {
-            status.style.color = "#38bdf8";
-            status.innerText = `📋 Parte 1 de ${totalPartes} copiada automáticamente. Ve a la IA, pégala y luego vuelve aquí para presionar el botón de la Parte 2.`;
-            btn.innerText = `📋 COPIAR PARTE 2 DE ${totalPartes}`;
-            btn.disabled = false;
-            btn.onclick = gestionarCopiadoSecuencial;
-        } else {
-            status.style.color = "#10b981";
-            status.innerText = "✨ ¡Súper-Prompt único copiado al portapapeles! Ya puedes pegarlo en la IA.";
-            btn.disabled = false;
-        }
+        // --- RENDERIZADO DE LA NUEVA COLA DE COPIADO ---
+        status.style.color = "#10b981";
+        status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
+        btn.innerText = `🔄 REGENERAR PROMPTS`;
+        btn.disabled = false;
+        btn.onclick = () => location.reload();
         
         previewBox.style.display = "block";
         listaArchivos.innerHTML = htmlPreviewArchivos + 
-            `<br><small style="color: #94a3b8; display:block; margin-top:15px;">El código completo se dividió en **${totalPartes} parte(s)** para prevenir recortes de la IA.</small>`;
+            `<br><small style="color: #94a3b8; display:block; margin-top:15px;">El código se dividió en **${totalPartes} parte(s)** basado en el límite de ${(MAX_CARACTERES_POR_PROMPT/1000)}k caracteres.</small>`;
+
+        queueContainer.style.display = "block";
+        partQueue.innerHTML = "";
+
+        if (totalPartes === 1) {
+            // Si solo es 1 parte, copiar directamente
+            copiarParte(0);
+        } else {
+            // Renderizar la cola visual
+            btnCopiarTodo.style.display = "block";
+            promptsFinalesListos.forEach((_, index) => {
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                div.id = `queue-item-${index}`;
+                div.innerHTML = `
+                    <span class="queue-item-info">Parte ${index + 1} de ${totalPartes} (${(promptsFinalesListos[index].length / 1024).toFixed(1)} KB)</span>
+                    <button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar</button>
+                `;
+                partQueue.appendChild(div);
+            });
+            // Auto-copiar la primera parte y hacer foco en el segundo botón
+            copiarParte(0);
+        }
 
     } catch (e) {
         status.style.color = "#ef4444";
         status.innerText = `❌ Error: ${e.message}`;
         console.error(e);
         btn.disabled = false;
+    }
+}
+
+// --- NUEVAS FUNCIONES DE COPIADO RÁPIDO ---
+
+async function copiarParte(index) {
+    if (!promptsFinalesListos[index]) return;
+
+    try {
+        await navigator.clipboard.writeText(promptsFinalesListos[index]);
+        
+        const btn = document.getElementById(`copyBtn-${index}`);
+        const item = document.getElementById(`queue-item-${index}`);
+        
+        if (btn && item) {
+            btn.innerText = "✅ ¡Copiado!";
+            btn.classList.add('copied');
+            btn.disabled = true;
+            item.classList.add('copied');
+        }
+
+        // Auto-enfocar el siguiente botón si existe
+        const nextIndex = index + 1;
+        const nextBtn = document.getElementById(`copyBtn-${nextIndex}`);
+        if (nextBtn) {
+            nextBtn.focus();
+            nextBtn.classList.add('pulse'); // Pequeño efecto visual
+            setTimeout(() => nextBtn.classList.remove('pulse'), 1000);
+        }
+    } catch (err) {
+        alert("Error al copiar al portapapeles. Asegúrate de darle permisos al navegador.");
+    }
+}
+
+async function copiarTodoElPrompt() {
+    if (promptsFinalesListos.length === 0) return;
+    
+    // Unir todo con separadores dobles para que la IA entienda que son bloques distintos
+    const todoUnido = promptsFinalesListos.map((p, i) => {
+        // Limpiar las instrucciones de "espera la siguiente parte" si lo unimos todo
+        let cleanP = p.replace("FIN DE LA PARTE. Espera el siguiente prompt.", "FIN DEL BLOQUE DE ARCHIVOS.");
+        cleanP = cleanP.replace("CRÍTICO: NO respondas ni ejecutes ninguna acción todavía. Solo di \"Recibido parte\" y sigue esperando el resto del código.", "CONTINÚA LEYENDO EL SIGUIENTE BLOQUE.");
+        return cleanP;
+    }).join("\n\n---SEPARADOR DE BLOQUE---\n\n");
+
+    try {
+        await navigator.clipboard.writeText(todoUnido);
+        const btn = document.getElementById('btnCopiarTodo');
+        btn.innerText = "✅ ¡Todo Copiado de Golpe!";
+        btn.disabled = true;
+        btn.style.background = "#475569";
+    } catch (err) {
+        alert("Error al copiar al portapapeles.");
     }
 }
