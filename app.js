@@ -1,5 +1,5 @@
 // Variable que controla la versión del script lógico
-const VER_APP = "2.2.1"; // Actualizado a v2.2.1 para control de caché
+const VER_APP = "2.2.2"; // Actualizado a v2.2.2 para control de caché
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -29,7 +29,11 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `5. PRESERVACIÓN DE IDENTIFICADORES: Está estrictamente prohibido renombrar funciones, variables, identificadores HTML (id), clases CSS o claves de almacenamiento (localStorage) existentes. Mantén intacta la nomenclatura original.\n` +
 `6. ENTORNO TECNOLÓGICO: Resuelve el objetivo utilizando exclusivamente las tecnologías nativas provistas (Vanilla JS, CSS nativo, etc.). No inventes dependencias ni asumas la existencia de librerías externas que no veas explícitamente en el contexto.\n` +
 `7. MODULARIDAD SEGURA: Cualquier lógica nueva debe aislarse correctamente y no debe interferir con los listeners de ciclo de vida (como DOMContentLoaded) ni con las variables globales del sistema.\n` +
-`8. SALIDA DIRECTA Y COMPACTA: Entrega los resultados estructurados en bloques de código Markdown limpios. Evita textos introductorios densos, rodeos teóricos o saludos; prioriza la legibilidad y la velocidad de copiado.`;
+`8. SALIDA DIRECTA Y COMPACTA: Entrega los resultados estructurados en bloques de código Markdown limpios. Evita textos introductorios densos, rodeos teóricos o saludos; prioriza la legibilidad y la velocidad de copiado.\n` +
+`9. MANEJO DEFENSIVO DEL DOM: Antes de interactuar con elementos de la interfaz, valida su existencia (if (elemento)) para evitar excepciones en JS si la estructura cambia.\n` +
+`10. CONTROL DE LISTENERS: Diseña los manejadores de eventos de forma que no puedan registrarse duplicados ni generar fugas de memoria al reejecutar funciones.\n` +
+`11. INTEGRIDAD DEL ESTADO: Los cambios lógicos no deben resetear involuntariamente inputs, variables de estado activas o datos alojados en LocalStorage.\n` +
+`12. SEÑALIZACIÓN EN CÓDIGO: Inserta comentarios breves como '// NUEVO:' o '// MODIFICADO:' directamente sobre las líneas cambiadas dentro del bloque de código devuelto para facilitar su revisión.`;
 
 // Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
