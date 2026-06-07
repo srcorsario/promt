@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.6.1 por optimización de lógica de empaquetado
-const VER_APP = "2.6.1"; 
+// MODIFICADO: Versión actualizada a v2.6.2 para cumplimiento estricto de integridad de archivos
+const VER_APP = "2.6.2"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -47,10 +47,11 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `24. VALIDACIÓN PREVIA DE RESPUESTA: Antes de entregar el resultado final, verifica que el código generado no contenga referencias a variables inexistentes, funciones inexistentes, imports faltantes o elementos eliminados accidentalmente.\n` +
 `25. ORDEN DE PRIORIDAD: En caso de conflicto entre optimización, refactorización, limpieza de código y preservación del comportamiento existente, debe prevalecer siempre la preservación del comportamiento actual del sistema.\n`;
 
-// DOMContentLoaded mantenido intacto según regla 14
 document.addEventListener('DOMContentLoaded', () => {
     const versionBadgeApp = document.getElementById('versionApp');
-    if (versionBadgeApp) versionBadgeApp.innerText = `App: v${VER_APP}`;
+    if (versionBadgeApp) {
+        versionBadgeApp.innerText = `App: v${VER_APP}`;
+    }
     actualizarDesplegableHistorial();
     const urlGuardada = localStorage.getItem('last_github_repo');
     if (urlGuardada) {
@@ -187,36 +188,61 @@ async function construirSuperPrompt() {
     const urlSecundariaInput = document.getElementById('repoUrlSecundario')?.value.trim();
     const instrucciones = document.getElementById('instrucciones')?.value.trim();
     const limitSelectEl = document.getElementById('limitSelect');
-    // MODIFICADO: Se permite mayor flexibilidad de límite si es necesario
     const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 15000;
-    
     const btn = document.getElementById('btnGenerar');
     const btnReset = document.getElementById('btnReset');
     const status = document.getElementById('statusCarga');
-    
-    if (!urlInput) { alert("Introduce una URL de GitHub principal."); return; }
-
+    const previewBox = document.getElementById('previewBox');
+    const listaArchivos = document.getElementById('listaArchivos');
+    const queueContainer = document.getElementById('queueContainer');
+    const partQueue = document.getElementById('partQueue');
+    const btnCopiarTodo = document.getElementById('btnCopiarTodo');
+    if (!urlInput) { alert("Por favor, introduce una URL de GitHub principal."); return; }
+    localStorage.setItem('last_github_repo', urlInput);
+    localStorage.setItem('last_limit_select', MAX_CARACTERES_POR_PROMPT);
+    guardarEnHistorial(urlInput);
+    if (urlSecundariaInput) {
+        localStorage.setItem('last_github_repo_secondary', urlSecundariaInput);
+        guardarEnHistorial(urlSecundariaInput);
+    } else {
+        localStorage.removeItem('last_github_repo_secondary');
+    }
+    const datosRepoPrincipal = parsearGitHubUrl(urlInput);
+    if (!datosRepoPrincipal) { alert("Formato de URL principal no reconocido."); return; }
+    let datosRepoSecundario = null;
+    if (urlSecundariaInput) {
+        datosRepoSecundario = parsearGitHubUrl(urlSecundariaInput);
+        if (!datosRepoSecundario) { alert("Formato de URL secundaria no reconocido."); return; }
+    }
+    if (btn) btn.disabled = true;
+    if (status) {
+        status.style.display = "block";
+        status.style.color = "#38bdf8";
+        status.innerText = "⏳ Leyendo estructura del repositorio principal...";
+    }
     try {
         let todosLosBloquesArchivos = [];
-        const resultadoPrincipal = await obtenerBloquesCodigo(parsearGitHubUrl(urlInput), true);
+        let htmlPreviewArchivos = "";
+        const resultadoPrincipal = await obtenerBloquesCodigo(datosRepoPrincipal, true);
+        if (resultadoPrincipal.nombresArchivos.length === 0) throw new Error("No se encontraron archivos válidos.");
         todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoPrincipal.bloques);
-
-        if (urlSecundariaInput) {
-            const resultadoSecundario = await obtenerBloquesCodigo(parsearGitHubUrl(urlSecundariaInput), false);
-            todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoSecundario.bloques);
+        htmlPreviewArchivos += `<div class="repo-section-title">📂 Principal (${datosRepoPrincipal.repo}):</div>`;
+        htmlPreviewArchivos += resultadoPrincipal.nombresArchivos.map(name => `<span class="file-tag">📄 ${name}</span>`).join('');
+        if (datosRepoSecundario) {
+            status.innerText = "⏳ Leyendo estructura del repositorio secundario...";
+            const resultadoSecundario = await obtenerBloquesCodigo(datosRepoSecundario, false);
+            if (resultadoSecundario.nombresArchivos.length > 0) {
+                todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoSecundario.bloques);
+                htmlPreviewArchivos += `<div class="repo-section-title" style="margin-top:15px;">📂 Secundario de Referencia (${datosRepoSecundario.repo}):</div>`;
+                htmlPreviewArchivos += resultadoSecundario.nombresArchivos.map(name => `<span class="file-tag" style="border-left: 3px solid var(--accent);">📄 ${name}</span>`).join('');
+            }
         }
-
-        // --- MODIFICADO: Lógica de segmentación estricta para archivos completos ---
+        status.innerText = "⏳ Armando secuencia de prompts...";
         let listaPromptsAGenerar = [];
         let acumulador = "";
-
         for (const bloque of todosLosBloquesArchivos) {
-            // Si el bloque por sí solo es mayor al límite, obligamos a que sea un prompt único (excepción)
             if (bloque.length > MAX_CARACTERES_POR_PROMPT) {
-                if (acumulador !== "") {
-                    listaPromptsAGenerar.push(acumulador);
-                    acumulador = "";
-                }
+                if (acumulador !== "") { listaPromptsAGenerar.push(acumulador); acumulador = ""; }
                 listaPromptsAGenerar.push(bloque);
             } else if ((acumulador + bloque).length > MAX_CARACTERES_POR_PROMPT) {
                 listaPromptsAGenerar.push(acumulador);
@@ -226,26 +252,68 @@ async function construirSuperPrompt() {
             }
         }
         if (acumulador !== "") listaPromptsAGenerar.push(acumulador);
-
-        // --- CONSTRUCCIÓN FINAL (Similar a la original pero asegurando estructura completa) ---
-        promptsFinalesListos = listaPromptsAGenerar.map((contenido, index) => {
+        promptsFinalesListos = [];
+        const totalPartes = listaPromptsAGenerar.length;
+        listaPromptsAGenerar.forEach((contenido, index) => {
             const num = index + 1;
-            const total = listaPromptsAGenerar.length;
-            let header = (num === 1) ? `CONTEXTO (Parte ${num}/${total})... OBJETIVO: ${instrucciones}\n` : `CONTEXTO (Parte ${num}/${total})\n`;
-            let footer = (num === total) ? `\nFIN DEL CONTEXTO. Procesa todo el código.` : `\nEspera parte ${num + 1}`;
-            
-            // Inyectar reglas en el último bloque
-            if (num === total) header += REGLAS_EMPAQUETADO_SISTEMA;
-            
-            return `${header}\nESTRUCTURA DEL CÓDIGO:\n${contenido}${footer}`;
+            let texto = "";
+            if (num === 1) {
+                texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n`;
+                if (instrucciones) texto += `OBJETIVO: ${instrucciones}\n\n`;
+            } else if (num < totalPartes) {
+                texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
+            } else {
+                texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
+                texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
+            }
+            texto += `ESTRUCTURA DEL CÓDIGO (PARTE ${num}):\n${contenido}\n`;
+            texto += (num === totalPartes) ? `FIN DEL CONTEXTO. Procesa todo.` : `Esperando parte ${num + 1}`;
+            promptsFinalesListos.push(texto);
         });
-
-        // (Renderizado de interfaz omitido por brevedad, se mantiene igual al original)
-        if (status) { status.style.display = "block"; status.innerText = `✅ ¡Prompts generados! (${listaPromptsAGenerar.length} partes)`; }
-        // ... (resto del código de UI)
+        status.style.color = "#10b981";
+        status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
+        if (btn) { btn.innerText = "✅ COLA LISTA"; btn.disabled = true; btn.style.display = "none"; }
+        if (btnReset) btnReset.style.display = "block";
+        if (previewBox) previewBox.style.display = "block";
+        if (listaArchivos) listaArchivos.innerHTML = htmlPreviewArchivos;
+        if (queueContainer) queueContainer.style.display = "block";
+        if (partQueue) partQueue.innerHTML = "";
+        if (totalPartes === 1) { copiarParte(0); } else {
+            if (btnCopiarTodo) btnCopiarTodo.style.display = "block";
+            promptsFinalesListos.forEach((_, index) => {
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                div.id = `queue-item-${index}`;
+                div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes}</span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
+                partQueue.appendChild(div);
+            });
+        }
     } catch (error) {
         console.error(error);
-        if (status) status.innerText = `❌ Error: ${error.message}`;
+        if (status) { status.style.color = "#ef4444"; status.innerText = `❌ Error: ${error.message}`; }
+        if (btn) { btn.disabled = false; btn.innerText = "⚡ REINTENTAR"; }
     }
 }
-// ... (Resto de funciones: copiarParte, copiarTodoElPrompt, etc. se mantienen intactas)
+
+function copiarParte(index) {
+    const texto = promptsFinalesListos[index];
+    if (!texto) return;
+    navigator.clipboard.writeText(texto).then(() => {
+        const btn = document.getElementById(`copyBtn-${index}`);
+        if (btn) {
+            btn.innerText = "✅ ¡Copiado!";
+            setTimeout(() => btn.innerText = `📋 Copiar Parte ${index + 1}`, 2500);
+        }
+    });
+}
+
+function copiarTodoElPrompt() {
+    const textoCompleto = promptsFinalesListos.join("\n\n");
+    navigator.clipboard.writeText(textoCompleto).then(() => {
+        const btnAll = document.getElementById('btnCopiarTodo');
+        if (btnAll) {
+            btnAll.innerText = "✅ ¡TODO COPIADO!";
+            setTimeout(() => btnAll.innerText = "📄 COPIAR TODO EN UNO", 3000);
+        }
+    });
+}
