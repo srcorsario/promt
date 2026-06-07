@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.4.0 por adición de reglas de control de alucinaciones y datos
-const VER_APP = "2.4.0"; 
+// MODIFICADO: Versión actualizada a v2.5.0 por adición de reglas de control de alucinaciones y datos
+const VER_APP = "2.5.0"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -38,7 +38,8 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `13. ATRIBUTOS INLINE EN HTML: Si una modificación en JavaScript altera la firma, parámetros o nombre de una función, es obligatorio actualizar en consecuencia todas sus llamadas interactivas inline correspondientes en el archivo HTML (como onclick u onchange).\n` +
 `14. RESTRICCIÓN DE ALCANCE QUIRÚRGICO: Respeta la arquitectura interna por bloques de funciones. Si el cambio solicitado afecta únicamente a un proceso aislado, limita las modificaciones estrictamente al interior de ese bloque; el resto de los bloques no afectados deben reescribirse de manera idéntica e intacta línea por línea.\n` +
 `15. INTEGRIDAD REPOSITORIO DE DATOS: Queda estrictamente prohibido recortar, resumir o usar comentarios elípticos en objetos de configuración, estructuras JSON, arrays extensos de datos o diccionarios globales de constantes preexistentes dentro de los archivos devueltos. Deben reescribirse completos elemento por elemento.\n` +
-`16. AUTOSUFICIENCIA LOGICA: No asumas ni invoques funciones, utilidades globales, ni variables de estado que no estén explícitamente declaradas en los archivos provistos. Si el objetivo requiere lógica adicional, debes programar su solución por completo de forma explícita y visible dentro del código modificado.`;
+// MODIFICADO: Se cambia el ';' por '+' para incluir las reglas de la 17 a la 25 correctamente.
+`16. AUTOSUFICIENCIA LOGICA: No asumas ni invoques funciones, utilidades globales, ni variables de estado que no estén explícitamente declaradas en los archivos provistos. Si el objetivo requiere lógica adicional, debes programar su solución por completo de forma explícita y visible dentro del código modificado.\n` +
 `17. EXISTENCIA VERIFICABLE DE ARCHIVOS: No puedes mencionar, modificar, importar, extender ni referenciar archivos que no hayan sido incluidos explícitamente dentro del contexto recibido. Si una funcionalidad depende de un archivo inexistente en el contexto, debes indicarlo expresamente en lugar de asumir su existencia.\n` +
 `18. TRAZABILIDAD FUNCIONAL: No afirmes que existe una funcionalidad, flujo, endpoint, proceso, evento, API o comportamiento si no puede inferirse directamente del código proporcionado. Diferencia claramente entre hechos observados y propuestas de mejora.\n` +
 `19. DEPENDENCIAS EXPLÍCITAS: Antes de utilizar cualquier librería, API, framework o paquete, verifica que aparezca explícitamente en los archivos proporcionados. Si no aparece, no puede utilizarse ni asumirse su disponibilidad.\n` +
@@ -361,6 +362,9 @@ async function construirSuperPrompt() {
                 if (instrucciones) {
                     textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL (Para tu conocimiento previo):\n${instrucciones}\n\n`;
                 }
+                // NUEVO: Inyección de reglas en el primer trozo
+                textoPrompt += REGLAS_EMPAQUETADO_SISTEMA;
+                textoPrompt += `\n\n`;
             } else if (numeroParte < totalPartes) {
                 textoPrompt += `Esta es la PARTE ${numeroParte} de ${totalPartes} del contexto del proyecto "${datosRepoPrincipal.repo}".\n`;
                 textoPrompt += `CRÍTICO: NO respondas ni ejecutes ninguna acción todavía. Solo di "Recibido parte ${numeroParte}" y sigue esperando el resto del código.\n\n`;
@@ -374,8 +378,7 @@ async function construirSuperPrompt() {
                     textoPrompt += `OBJETIVO: Analiza la estructura del código actual de los repositorios cargados para responder a mis próximas preguntas.\n`;
                 }
                 
-                // INYECCIÓN INTRÍNSECA AUTOMÁTICA DE COMPORTAMIENTO
-                textoPrompt += REGLAS_EMPAQUETADO_SISTEMA;
+                // ELIMINADO: Se retiró REGLAS_EMPAQUETADO_SISTEMA de esta sección
                 textoPrompt += `\n\n`;
             }
 
@@ -384,7 +387,9 @@ async function construirSuperPrompt() {
             textoPrompt += `\n=========================================\n`;
             
             if (numeroParte === totalPartes) {
-                textoPrompt += `FIN DEL CONTEXTO. Por favor, procesa toda la información recibida desde la Parte 1 y responde a mi objetivo.\n`;
+                // NUEVO: Se repiten las reglas al final del último trozo
+                textoPrompt += REGLAS_EMPAQUETADO_SISTEMA;
+                textoPrompt += `\n\nFIN DEL CONTEXTO. Por favor, procesa toda la información recibida desde la Parte 1 y responde a mi objetivo.\n`;
                 textoPrompt += `Eso es todo`;
             } else {
                 textoPrompt += `FIN DE LA PARTE ${numeroParte}. Espera el siguiente prompt.`;
