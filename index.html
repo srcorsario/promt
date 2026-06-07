@@ -12,6 +12,7 @@
             --accent: #38bdf8;
             --text: #f8fafc;
             --green: #10b981;
+            --danger: #ef4444;
         }
         body {
             font-family: 'Montserrat', sans-serif;
@@ -24,7 +25,7 @@
         }
         .container {
             width: 100%;
-            max-width: 96%; /* Aprovecha casi la totalidad de pantallas grandes */
+            max-width: 96%;
             margin: 0 auto;
         }
         .header-area {
@@ -59,8 +60,8 @@
         @media (max-width: 768px) {
             .url-grid { grid-template-columns: 1fr; gap: 0; }
         }
-        label { display: block; font-weight: 600; margin-bottom: 8px; color: #cbd5e1; }
-        input[type="text"], textarea {
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #cbd5e1; font-size: 0.9rem; }
+        input[type="text"], textarea, select {
             width: 100%;
             padding: 12px;
             box-sizing: border-box;
@@ -71,28 +72,28 @@
             font-family: inherit;
             margin-bottom: 15px;
         }
-        /* Caja de prompt gigante aprovechando el ancho y alto del monitor */
+        select { cursor: pointer; }
         textarea { 
-            height: 350px; 
+            height: 300px; 
             resize: vertical; 
             font-size: 1.05rem;
             line-height: 1.5;
         }
         
         button {
-            width: 100%;
             background: var(--accent);
             color: #0f172a;
             border: none;
-            padding: 16px;
+            padding: 14px;
             border-radius: 8px;
             font-weight: 700;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: background 0.2s, transform 0.1s;
         }
         button:hover { background: #7dd3fc; }
-        button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; transform: none; }
         
         .status {
             text-align: center;
@@ -118,6 +119,39 @@
             margin-bottom: 5px;
             font-weight: 700;
         }
+
+        /* --- Estilos Cola de Copiado --- */
+        .context-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .context-selector label { margin: 0; font-size: 0.85rem; }
+        .context-selector select { margin: 0; width: auto; flex-grow: 1; }
+
+        .queue-container { margin-top: 25px; }
+        .queue-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0f172a;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border: 1px solid #334155;
+            transition: border-color 0.3s;
+        }
+        .queue-item.copied { border-color: var(--green); opacity: 0.7; }
+        .queue-item-info { font-size: 0.9rem; font-weight: 600; }
+        .copy-part-btn { width: auto; padding: 8px 16px; font-size: 0.85rem; }
+        .copy-part-btn.copied { background: var(--green); }
+        .copy-all-btn { background: var(--green); width: 100%; margin-bottom: 15px; }
+        .copy-all-btn:hover { background: #059669; }
     </style>
 </head>
 <body>
@@ -126,7 +160,7 @@
     <div class="header-area">
         <h1>🚀 GitHub Prompt Helper</h1>
         <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
-        <span class="version-badge">v1.2.0</span>
+        <span class="version-badge">v2.0.1 - Fast Fix</span>
     </div>
 
     <div class="box">
@@ -136,21 +170,39 @@
                 <input type="text" id="repoUrl" placeholder="Ej: https://github.com/usuario/proyecto_principal">
             </div>
             <div>
-                <label for="repoUrlSecundario">URL del Repositorio Secundario (Opcional - Para clonar funciones)</label>
+                <label for="repoUrlSecundario">URL del Repositorio Secundario (Opcional)</label>
                 <input type="text" id="repoUrlSecundario" placeholder="Ej: https://github.com/usuario/proyecto_referencia">
             </div>
         </div>
+
+        <div class="context-selector">
+            <label>🧠 Tamaño de Contexto de tu IA:</label>
+            <select id="limitSelect">
+                <option value="100000">Gigante (Gemini 1.5 - 1 Sola Parte)</option>
+                <option value="60000">Grande (Claude 3.5 - Pocas Partes)</option>
+                <option value="30000">Mediano (GPT-4o Estándar)</option>
+                <option value="15000" selected>Pequeño (Modelos Antiguos - 15k chars)</option>
+            </select>
+        </div>
         
-        <label for="instrucciones">¿Qué le vas a pedir a la IA? (Escribe tu Prompt aquí con total espacio)</label>
+        <label for="instrucciones">¿Qué le vas a pedir a la IA? (Escribe tu Prompt aquí)</label>
         <textarea id="instrucciones" placeholder="Ej: Analiza el proyecto secundario e implementa la lógica de botones dinámicos en el archivo app.js del proyecto principal..."></textarea>
         
-        <button id="btnGenerar" onclick="construirSúperPrompt()">⚡ GENERAR Y COPIAR PROMPT</button>
+        <button id="btnGenerar" onclick="construirSuperPrompt()">⚡ GENERAR PROMPTS</button>
         <div id="statusCarga" class="status"></div>
     </div>
 
     <div class="box" id="previewBox" style="display:none;">
         <label>Archivos detectados e incluidos en el contexto:</label>
         <div id="listaArchivos"></div>
+        
+        <div class="queue-container" id="queueContainer" style="display:none;">
+            <hr style="border-color: #334155; margin: 20px 0;">
+            <h3 style="margin-top:0; color:var(--accent);">📋 Cola de Copiado Rápido</h3>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin-top: -10px;">Haz clic en cada parte, pégala en tu IA, y vuelve por la siguiente.</p>
+            <button class="copy-all-btn" id="btnCopiarTodo" onclick="copiarTodoElPrompt()" style="display:none;">📄 COPIAR TODO EN UNO (Solo para IAs con contexto largo)</button>
+            <div id="partQueue"></div>
+        </div>
     </div>
 </div>
 
