@@ -24,17 +24,40 @@
         }
         .container {
             width: 100%;
-            max-width: 800px;
+            max-width: 96%; /* Aprovecha casi la totalidad de pantallas grandes */
+            margin: 0 auto;
         }
-        h1 { text-align: center; color: var(--accent); font-size: 1.8rem; margin-bottom: 5px; }
-        p.subtitle { text-align: center; color: #94a3b8; margin-top: 0; margin-bottom: 25px; }
+        .header-area {
+            text-align: center;
+            margin-bottom: 25px;
+            position: relative;
+        }
+        h1 { color: var(--accent); font-size: 2.2rem; margin-bottom: 5px; }
+        p.subtitle { color: #94a3b8; margin-top: 0; margin-bottom: 10px; }
+        .version-badge {
+            display: inline-block;
+            background: #334155;
+            color: var(--accent);
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
         
         .box {
             background: var(--card);
-            padding: 20px;
+            padding: 25px;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
             margin-bottom: 20px;
+        }
+        .url-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .url-grid { grid-template-columns: 1fr; gap: 0; }
         }
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #cbd5e1; }
         input[type="text"], textarea {
@@ -48,17 +71,23 @@
             font-family: inherit;
             margin-bottom: 15px;
         }
-        textarea { height: 100px; resize: vertical; }
+        /* Caja de prompt gigante aprovechando el ancho y alto del monitor */
+        textarea { 
+            height: 350px; 
+            resize: vertical; 
+            font-size: 1.05rem;
+            line-height: 1.5;
+        }
         
         button {
             width: 100%;
             background: var(--accent);
             color: #0f172a;
             border: none;
-            padding: 14px;
+            padding: 16px;
             border-radius: 8px;
             font-weight: 700;
-            font-size: 1rem;
+            font-size: 1.1rem;
             cursor: pointer;
             transition: background 0.2s;
         }
@@ -68,9 +97,10 @@
         .status {
             text-align: center;
             font-weight: 600;
-            margin: 10px 0;
+            margin: 15px 0 0;
             color: var(--green);
             display: none;
+            font-size: 1.05rem;
         }
         .file-tag {
             display: inline-block;
@@ -80,27 +110,46 @@
             margin: 4px;
             font-size: 0.85rem;
         }
+        .repo-section-title {
+            font-size: 0.9rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🚀 GitHub Prompt Helper</h1>
-    <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
+    <div class="header-area">
+        <h1>🚀 GitHub Prompt Helper</h1>
+        <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
+        <span class="version-badge">v1.2.0</span>
+    </div>
 
     <div class="box">
-        <label for="repoUrl">URL del Repositorio de GitHub (Rama Principal)</label>
-        <input type="text" id="repoUrl" placeholder="Ej: https://github.com/srcorsario/Web_Editor_Pro/tree/main">
+        <div class="url-grid">
+            <div>
+                <label for="repoUrl">URL del Repositorio Principal (GitHub)</label>
+                <input type="text" id="repoUrl" placeholder="Ej: https://github.com/usuario/proyecto_principal">
+            </div>
+            <div>
+                <label for="repoUrlSecundario">URL del Repositorio Secundario (Opcional - Para clonar funciones)</label>
+                <input type="text" id="repoUrlSecundario" placeholder="Ej: https://github.com/usuario/proyecto_referencia">
+            </div>
+        </div>
         
-        <label for="instrucciones">¿Qué le vas a pedir a la IA? (Opcional)</label>
-        <textarea id="instrucciones" placeholder="Ej: Revisa por qué no cargan los datos o ayúdame a optimizar el CSS..."></textarea>
+        <label for="instrucciones">¿Qué le vas a pedir a la IA? (Escribe tu Prompt aquí con total espacio)</label>
+        <textarea id="instrucciones" placeholder="Ej: Analiza el proyecto secundario e implementa la lógica de botones dinámicos en el archivo app.js del proyecto principal..."></textarea>
         
         <button id="btnGenerar" onclick="construirSúperPrompt()">⚡ GENERAR Y COPIAR PROMPT</button>
         <div id="statusCarga" class="status"></div>
     </div>
 
     <div class="box" id="previewBox" style="display:none;">
-        <label>Archivos detectados e incluidos:</label>
+        <label>Archivos detectados e incluidos en el contexto:</label>
         <div id="listaArchivos"></div>
     </div>
 </div>
