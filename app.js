@@ -1,8 +1,17 @@
 // Variable que controla la versión del script lógico
-const VER_APP = "2.1.0";
+const VER_APP = "2.2.0";
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
+
+// Diccionario de órdenes e instrucciones prefijadas
+const PLANTILLAS_ORDENES = {
+    analizar: "Analiza detalladamente la arquitectura de este proyecto. Explica cómo se comunican los componentes, los flujos de datos principales y enumera las dependencias críticas detectadas.",
+    bugs: "Revisa exhaustivamente todo el código provisto en busca de errores de lógica, fallas de seguridad potenciales, fugas de memoria o malas prácticas. Muestra los puntos críticos y propón sus correcciones exactas.",
+    refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
+    documentar: "Generar la documentación técnica correspondiente para las funciones y módulos clave de este repositorio. Añade comentarios claros y estructuras de tipo JSDoc/comentarios descriptivos donde falten.",
+    test: "Examina los flujos lógicos y genera una estrategia integral de pruebas unitarias. Detalla qué casos de prueba y escenarios límite (edge cases) se deben validar de forma prioritaria en base a los archivos adjuntos."
+};
 
 // Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
@@ -28,6 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('limitSelect').value = limitGuardado;
     }
 });
+
+// Inyecta el texto predefinido directo en el Textarea de prompts
+function aplicarOrdenPrefijada(clavePlantilla) {
+    const textoInyectar = PLANTILLAS_ORDENES[clavePlantilla];
+    if (textoInyectar) {
+        document.getElementById('instrucciones').value = textoInyectar;
+    }
+}
 
 // Lógica de gestión del historial en LocalStorage
 function guardarEnHistorial(url) {
@@ -77,10 +94,11 @@ function actualizarDesplegableHistorial() {
 
 // Función limpia para resetear toda la interfaz (Trabajo anterior)
 function limpiarInterfaz() {
-    // Limpiar inputs de texto
+    // Limpiar inputs de texto y selectores de órdenes
     document.getElementById('repoUrl').value = '';
     document.getElementById('repoUrlSecundario').value = '';
     document.getElementById('instrucciones').value = '';
+    document.getElementById('ordenesPredeterminadas').value = '';
     
     // Ocultar contenedores de prompts y vistas previas
     document.getElementById('previewBox').style.display = "none";
@@ -301,11 +319,10 @@ async function construirSuperPrompt() {
         status.style.color = "#10b981";
         status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
         
-        // Transformamos el botón para guiar al usuario a limpiar/reiniciar cuando acabe
         btn.innerText = "✅ COLA LISTA";
         btn.disabled = true;
-        btn.style.display = "none"; // Ocultamos generar para priorizar el flujo de limpieza
-        btnReset.style.display = "block"; // Mostramos el botón de limpieza de interfaz
+        btn.style.display = "none";
+        btnReset.style.display = "block";
         
         previewBox.style.display = "block";
         listaArchivos.innerHTML = htmlPreviewArchivos + 
@@ -340,37 +357,28 @@ async function construirSuperPrompt() {
     }
 }
 
-// --- FUNCIONES DE COPIADO RÁPIDO ---
-
 async function copiarParte(index) {
     if (!promptsFinalesListos[index]) return;
-
     try {
         await navigator.clipboard.writeText(promptsFinalesListos[index]);
-        
         const btn = document.getElementById(`copyBtn-${index}`);
         const item = document.getElementById(`queue-item-${index}`);
-        
         if (btn && item) {
             btn.innerText = "✅ ¡Copiado!";
             btn.classList.add('copied');
             btn.disabled = true;
             item.classList.add('copied');
         }
-
         const nextIndex = index + 1;
         const nextBtn = document.getElementById(`copyBtn-${nextIndex}`);
-        if (nextBtn) {
-            nextBtn.focus();
-        }
+        if (nextBtn) nextBtn.focus();
     } catch (err) {
-        alert("Error al copiar al portapapeles. Asegúrate de darle permisos al navegador.");
+        alert("Error al copiar al portapapeles.");
     }
 }
 
 async function copiarTodoElPrompt() {
     if (promptsFinalesListos.length === 0) return;
-    
     const todoUnido = promptsFinalesListos.map((p, i) => {
         let cleanP = p.replace("FIN DE LA PARTE. Espera el siguiente prompt.", "FIN DEL BLOQUE DE ARCHIVOS.");
         cleanP = cleanP.replace("CRÍTICO: NO respondas ni ejecutes ninguna acción todavía. Solo di \"Recibido parte\" y sigue esperando el resto del código.", "CONTINÚA LEYENDO EL SIGUIENTE BLOQUE.");
@@ -384,6 +392,6 @@ async function copiarTodoElPrompt() {
         btn.disabled = true;
         btn.style.background = "#475569";
     } catch (err) {
-        alert("Error al copiar al portapapeles.");
+        alert("Error al copiar.");
     }
 }
