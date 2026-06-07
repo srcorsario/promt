@@ -1,13 +1,72 @@
-// Cargar la última URL usada al iniciar la página
+// Cargar las últimas URLs usadas al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
     const urlGuardada = localStorage.getItem('last_github_repo');
     if (urlGuardada) {
         document.getElementById('repoUrl').value = urlGuardada;
     }
+    const urlSecundariaGuardada = localStorage.getItem('last_github_repo_secondary');
+    if (urlSecundariaGuardada) {
+        document.getElementById('repoUrlSecundario').value = urlSecundariaGuardada;
+    }
 });
+
+// Función auxiliar para extraer datos de la URL de GitHub
+function parsearGitHubUrl(url) {
+    const regex = /github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+))?/;
+    const match = url.match(regex);
+    if (!match) return null;
+    return {
+        user: match[1],
+        repo: match[2],
+        branch: match[3] || 'main'
+    };
+}
+
+// Función para descargar y procesar los bloques de código de un repositorio dado
+async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
+    const extensionesPermitidas = ['.js', '.html', '.css', '.json', '.txt', '.md'];
+    let bloques = [];
+    let nombresArchivos = [];
+
+    const apiUrl = `https://api.github.com/repos/${datosRepo.user}/${datosRepo.repo}/contents?ref=${datosRepo.branch}`;
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) throw new Error(`No se pudo acceder al repositorio: ${datosRepo.repo}`);
+    
+    const archivos = await response.json();
+
+    for (const archivo of archivos) {
+        if (archivo.type === 'file') {
+            const tieneExtensionValida = extensionesPermitidas.some(ext => archivo.name.endsWith(ext));
+            
+            if (tieneExtensionValida && archivo.name !== 'package-lock.json') {
+                nombresArchivos.push(archivo.name);
+                
+                const resContenido = await fetch(archivo.download_url);
+                const texto = await resContenido.text();
+                
+                let bloque = `\n=========================================\n`;
+                bloque += `REPOSITORIO: ${datosRepo.repo} (${esPrincipal ? 'PRINCIPAL' : 'REFERENCIA SECUNDARIA'})\n`;
+                bloque += `ARCHIVO: ${archivo.name}\n`;
+                bloque += `=========================================\n`;
+                bloque += `${texto}\n`;
+                
+                bloques.push(bloque);
+            }
+        }
+    }
+    return { bloques, nombresArchivos };
+}
+
+// Auxiliar para limpiar strings de CSV si fuera necesario
+function superLimpiar(texto) {
+    if (!texto) return "";
+    return texto.trim().replace(/^"|"$/g, '');
+}
 
 async function construirSúperPrompt() {
     const urlInput = document.getElementById('repoUrl').value.trim();
+    const urlSecundariaInput = document.getElementById('repoUrlSecundario').value.trim();
     const instrucciones = document.getElementById('instrucciones').value.trim();
     const btn = document.getElementById('btnGenerar');
     const status = document.getElementById('statusCarga');
@@ -15,84 +74,78 @@ async function construirSúperPrompt() {
     const listaArchivos = document.getElementById('listaArchivos');
 
     if (!urlInput) {
-        alert("Por favor, introduce una URL de GitHub.");
+        alert("Por favor, introduce una URL de GitHub principal.");
         return;
     }
 
-    // Guardar URL en almacenamiento local
+    // Guardar URLs en almacenamiento local
     localStorage.setItem('last_github_repo', urlInput);
+    if (urlSecundariaInput) {
+        localStorage.setItem('last_github_repo_secondary', urlSecundariaInput);
+    } else {
+        localStorage.removeItem('last_github_repo_secondary');
+    }
 
-    // Procesar la URL de navegación normal para convertirla en API de GitHub
-    const regex = /github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+))?/;
-    const match = urlInput.match(regex);
-
-    if (!match) {
-        alert("Formato de URL no reconocido. Asegúrate de que sea una URL válida de GitHub.");
+    // Procesar repositorio principal
+    const datosRepoPrincipal = parsearGitHubUrl(urlInput);
+    if (!datosRepoPrincipal) {
+        alert("Formato de URL principal no reconocido. Asegúrate de que sea una URL válida de GitHub.");
         return;
     }
 
-    const [_, user, repo, branchInput] = match;
-    const branch = branchInput || 'main'; // Por defecto busca 'main' si no se especifica
+    // Procesar repositorio secundario si existe
+    let datosRepoSecundario = null;
+    if (urlSecundariaInput) {
+        datosRepoSecundario = parsearGitHubUrl(urlSecundariaInput);
+        if (!datosRepoSecundario) {
+            alert("Formato de URL secundaria no reconocido. Asegúrate de que sea una URL válida de GitHub.");
+            return;
+        }
+    }
 
     btn.disabled = true;
     status.style.display = "block";
     status.style.color = "#38bdf8";
-    status.innerText = "⏳ Leyendo estructura del repositorio...";
+    status.innerText = "⏳ Leyendo estructura del repositorio principal...";
 
     try {
-        // Consultar la API de contenido raíz del repositorio
-        const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents?ref=${branch}`;
-        const response = await fetch(apiUrl);
-        
-        if (!response.ok) throw new Error("No se pudo acceder al repositorio.");
-        
-        const archivos = await response.json();
-        
-        status.innerText = "⏳ Extrayendo el contenido de los archivos...";
-        
-        let bloquesArchivos = [];
-        let archivosContados = [];
+        let todosLosBloquesArchivos = [];
+        let htmlPreviewArchivos = "";
 
-        // Filtro: Solo nos interesan archivos comunes de código en la raíz
-        const extensionesPermitidas = ['.js', '.html', '.css', '.json', '.txt', '.md'];
+        // 1. Cargar repositorio principal
+        const resultadoPrincipal = await obtenerBloquesCodigo(datosRepoPrincipal, true);
+        if (resultadoPrincipal.nombresArchivos.length === 0) {
+            throw new Error("No se encontraron archivos válidos en la raíz del repositorio principal.");
+        }
+        todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoPrincipal.bloques);
+        
+        htmlPreviewArchivos += `<div class="repo-section-title">📂 Principal (${datosRepoPrincipal.repo}):</div>`;
+        htmlPreviewArchivos += resultadoPrincipal.nombresArchivos.map(name => `<span class="file-tag">📄 ${name}</span>`).join('');
 
-        for (const archivo of archivos) {
-            if (archivo.type === 'file') {
-                const tieneExtensionValida = extensionesPermitidas.some(ext => archivo.name.endsWith(ext));
-                
-                if (tieneExtensionValida && archivo.name !== 'package-lock.json') {
-                    archivosContados.push(archivo.name);
-                    
-                    // Descargar el contenido plano del archivo
-                    const resContenido = await fetch(archivo.download_url);
-                    const texto = await resContenido.text();
-                    
-                    let bloque = `\n=========================================\n`;
-                    bloque += `ARCHIVO: ${archivo.name}\n`;
-                    bloque += `=========================================\n`;
-                    bloque += `${texto}\n`;
-                    
-                    bloquesArchivos.push(bloque);
-                }
+        // 2. Cargar repositorio secundario si ha sido provisto
+        if (datosRepoSecundario) {
+            status.innerText = "⏳ Leyendo estructura del repositorio secundario...";
+            const resultadoSecundario = await obtenerBloquesCodigo(datosRepoSecundario, false);
+            if (resultadoSecundario.nombresArchivos.length > 0) {
+                todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoSecundario.bloques);
+                htmlPreviewArchivos += `<div class="repo-section-title" style="margin-top:15px;">📂 Secundario de Referencia (${datosRepoSecundario.repo}):</div>`;
+                htmlPreviewArchivos += resultadoSecundario.nombresArchivos.map(name => `<span class="file-tag" style="border-left: 3px solid var(--accent);">📄 ${name}</span>`).join('');
             }
         }
 
-        if (archivosContados.length === 0) {
-            throw new Error("No se encontraron archivos de texto legibles (.js, .html, .css...) en la raíz.");
-        }
+        status.innerText = "⏳ Armando secuencia de prompts...";
 
         // --- LÓGICA DE SEGMENTACIÓN EN VARIOS PROMPTS ---
         const MAX_CARACTERES_POR_PROMPT = 15000;
         let listaPromptsAGenerar = [];
         let acumuladorBloquesTexto = "";
 
-        for (let i = 0; i < bloquesArchivos.length; i++) {
-            // Si un solo archivo es extremadamente largo o el acumulador supera el límite, fragmentamos
-            if ((acumuladorBloquesTexto + bloquesArchivos[i]).length > MAX_CARACTERES_POR_PROMPT && acumuladorBloquesTexto !== "") {
+        for (let i = 0; i < todosLosBloquesArchivos.length; i++) {
+            if ((acumuladorBloquesTexto + todosLosBloquesArchivos[i]).length > MAX_CARACTERES_POR_PROMPT && acumuladorBloquesTexto !== "") {
                 listaPromptsAGenerar.push(acumuladorBloquesTexto);
-                acumuladorBloquesTexto = bloquesArchivos[i];
+                acumuladorBloquesTexto = todosLosBloquesArchivos[i];
             } else {
-                acumuladorBloquesTexto += bloquesArchivos[i];
+                acumuladorBloquesTexto += todosLosBloquesArchivos[i];
             }
         }
         if (acumuladorBloquesTexto !== "") {
@@ -108,7 +161,10 @@ async function construirSúperPrompt() {
             let textoPrompt = "";
 
             if (numeroParte === 1) {
-                textoPrompt += `Hola. Estoy trabajando en un proyecto alojado en GitHub llamado "${repo}".\n`;
+                textoPrompt += `Hola. Estoy trabajando en un proyecto alojado en GitHub llamado "${datosRepoPrincipal.repo}".\n`;
+                if (datosRepoSecundario) {
+                    textoPrompt += `También te adjunto el código de un segundo proyecto de referencia llamado "${datosRepoSecundario.repo}" para usar sus funciones como base o ejemplo.\n`;
+                }
                 textoPrompt += `A continuación te proporciono el contexto de mis archivos clave dividido en ${totalPartes} partes debido a limitaciones de espacio.\n`;
                 textoPrompt += `CRÍTICO: Esta es la PARTE ${numeroParte} de ${totalPartes}. NO respondas ni analices todavía. Solo di "Recibido parte ${numeroParte}" y espera a las siguientes partes.\n\n`;
                 
@@ -116,16 +172,16 @@ async function construirSúperPrompt() {
                     textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL (Para tu conocimiento previo):\n${instrucciones}\n\n`;
                 }
             } else if (numeroParte < totalPartes) {
-                textoPrompt += `Esta es la PARTE ${numeroParte} de ${totalPartes} del contexto del proyecto "${repo}".\n`;
+                textoPrompt += `Esta es la PARTE ${numeroParte} de ${totalPartes} del contexto del proyecto "${datosRepoPrincipal.repo}".\n`;
                 textoPrompt += `CRÍTICO: NO respondas ni ejecutes ninguna acción todavía. Solo di "Recibido parte ${numeroParte}" y sigue esperando el resto del código.\n\n`;
             } else {
-                textoPrompt += `Esta es la PARTE FINAL (${numeroParte} de ${totalPartes}) del contexto del proyecto "${repo}".\n`;
+                textoPrompt += `Esta es la PARTE FINAL (${numeroParte} de ${totalPartes}) del contexto de mis proyectos.\n`;
                 textoPrompt += `A partir de aquí ya tienes todo el contexto cargado.\n\n`;
                 
                 if (instrucciones) {
                     textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL:\n${instrucciones}\n\n`;
                 } else {
-                    textoPrompt += `OBJETIVO: Analiza la estructura del código actual para responder a mis próximas preguntas.\n\n`;
+                    textoPrompt += `OBJETIVO: Analiza la estructura del código actual de los repositorios cargados para responder a mis próximas preguntas.\n\n`;
                 }
             }
 
@@ -159,7 +215,7 @@ async function construirSúperPrompt() {
                     status.style.color = "#10b981";
                     status.innerText = `✨ ¡Todas las partes (${totalPartes}/${totalPartes}) han sido copiadas e introducidas!`;
                     btn.innerText = `⚡ REGENERAR PROMPTS`;
-                    btn.onclick = () => location.reload(); // Restablecer el estado
+                    btn.onclick = () => location.reload();
                 }
             }
         };
@@ -181,8 +237,8 @@ async function construirSúperPrompt() {
         }
         
         previewBox.style.display = "block";
-        listaArchivos.innerHTML = archivosContados.map(name => `<span class="file-tag">📄 ${name}</span>`).join('') + 
-            `<br><small style="color: #94a3b8; display:block; margin-top:10px;">El código se dividió en **${totalPartes} parte(s)** para prevenir recortes de la IA.</small>`;
+        listaArchivos.innerHTML = htmlPreviewArchivos + 
+            `<br><small style="color: #94a3b8; display:block; margin-top:15px;">El código completo se dividió en **${totalPartes} parte(s)** para prevenir recortes de la IA.</small>`;
 
     } catch (e) {
         status.style.color = "#ef4444";
