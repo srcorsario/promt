@@ -1,5 +1,6 @@
 // Variable que controla la versión del script lógico
-const VER_APP = "2.2.3"; // Actualizado a v2.2.3 para normas IA
+// MODIFICADO: Versión actualizada a v2.3.0 por adición de reglas de control de alucinaciones y datos
+const VER_APP = "2.3.0"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -17,6 +18,7 @@ const PLANTILLAS_ORDENES = {
  * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTICAMENTE)
  * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
  */
+// MODIFICADO: Extendido con las reglas obligatorias 15 y 16 para control total de datos e invenciones
 const REGLAS_EMPAQUETADO_SISTEMA = 
 `\n\n=========================================\n` +
 `NORMAS DE SALIDA OBLIGATORIAS PARA LA IA:\n` +
@@ -34,7 +36,9 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `11. INTEGRIDAD DEL ESTADO: Los cambios lógicos no deben resetear, limpiar o alterar involuntariamente los inputs, textareas, variables de estado activas o datos antiguos alojados en LocalStorage, manteniendo la compatibilidad hacia atrás.\n` +
 `12. SEÑALIZACIÓN EN CÓDIGO: Inserta comentarios breves como '// NUEVO:' o '// MODIFICADO:' directamente sobre las líneas cambiadas dentro del bloque de código devuelto para facilitar su revisión visual rápida.\n` +
 `13. ATRIBUTOS INLINE EN HTML: Si una modificación en JavaScript altera la firma, parámetros o nombre de una función, es obligatorio actualizar en consecuencia todas sus llamadas interactivas inline correspondientes en el archivo HTML (como onclick u onchange).\n` +
-`14. RESTRICCIÓN DE ALCANCE QUIRÚRGICO: Respeta la arquitectura interna por bloques de funciones. Si el cambio solicitado afecta únicamente a un proceso aislado, limita las modificaciones estrictamente al interior de ese bloque; el resto de los bloques no afectados deben reescribirse de manera idéntica e intacta línea por línea.`;
+`14. RESTRICCIÓN DE ALCANCE QUIRÚRGICO: Respeta la arquitectura interna por bloques de funciones. Si el cambio solicitado afecta únicamente a un proceso aislado, limita las modificaciones estrictamente al interior de ese bloque; el resto de los bloques no afectados deben reescribirse de manera idéntica e intacta línea por línea.\n` +
+`15. INTEGRIDAD REPOSITORIO DE DATOS: Queda estrictamente prohibido recortar, resumir o usar comentarios elípticos en objetos de configuración, estructuras JSON, arrays extensos de datos o diccionarios globales de constantes preexistentes dentro de los archivos devueltos. Deben reescribirse completos elemento por elemento.\n` +
+`16. AUTOSUFICIENCIA LOGICA: No asumas ni invoques funciones, utilidades globales, ni variables de estado que no estén explícitamente declaradas en los archivos provistos. Si el objetivo requiere lógica adicional, debes programar su solución por completo de forma explícita y visible dentro del código modificado.`;
 
 // Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
@@ -111,7 +115,7 @@ function actualizarDesplegableHistorial() {
     
     select.style.display = 'block';
     
-    // MODIFICADO: Evitar fugas de memoria sobreescribiendo el callback limpiamente con addEventListener controlado
+    // Evitar fugas de memoria sobreescribiendo el callback limpiamente con addEventListener controlado
     select.onchange = null; 
     select.onchange = (e) => {
         if (e.target.value) {
@@ -190,7 +194,7 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
     
     const archivos = await response.json();
     
-    // MODIFICADO: Validación preventiva de estructura de respuesta por límites de API de GitHub (Rate Limit de IP)
+    // Validación preventiva de estructura de respuesta por límites de API de GitHub (Rate Limit de IP)
     if (!Array.isArray(archivos)) {
         throw new Error(`La API de GitHub no retornó un árbol válido de archivos. Límite de peticiones excedido.`);
     }
@@ -200,7 +204,7 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
             const tieneExtensionValida = extensionesPermitidas.some(ext => archivo.name.endsWith(ext));
             
             if (tieneExtensionValida && archivo.name !== 'package-lock.json') {
-                // MODIFICADO: Aislamiento interno mediante try/catch por archivo para que un fallo de red individual no tumbe todo el proceso
+                // Aislamiento interno mediante try/catch por archivo para que un fallo de red individual no tumbe todo el proceso
                 try {
                     const resContenido = await fetch(archivo.download_url);
                     if (!resContenido.ok) continue; 
@@ -342,7 +346,7 @@ async function construirSuperPrompt() {
                     textoPrompt += `También te adjunto el código de un segundo proyecto de referencia llamado "${datosRepoSecundario.repo}" para usar sus funciones como base o ejemplo.\n`;
                 }
                 textoPrompt += `A continuación te proporciono el contexto de mis archivos clave dividido en ${totalPartes} partes debido a limitaciones de espacio.\n`;
-                textoPrompt += `CRÍTICO: Esta es la PARTE ${numeroParte} de ${totalPartes}. NO respondas ni analices todavía. Solo di "Recibido parte ${numeroParte}" y espera a las siguientes partes.\n\n`;
+                textoPrompt += `CRÍTICO: Esta es la PARTE ${numeroParte} de ${totalPartes}. NO respondas ni analices todavía. Solo di "Recibido parte ${numeroParte}" and espera a las siguientes partes.\n\n`;
                 
                 if (instrucciones) {
                     textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL (Para tu conocimiento previo):\n${instrucciones}\n\n`;
