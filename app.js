@@ -17,8 +17,6 @@ const PLANTILLAS_ORDENES = {
  * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTICAMENTE)
  * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
  */
-
-
 const REGLAS_EMPAQUETADO_SISTEMA = 
 `\n\n=========================================\n` +
 `NORMAS DE SALIDA OBLIGATORIAS PARA LA IA:\n` +
@@ -51,15 +49,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const urlGuardada = localStorage.getItem('last_github_repo');
     if (urlGuardada) {
-        document.getElementById('repoUrl').value = urlGuardada;
+        const repoUrlInput = document.getElementById('repoUrl');
+        if (repoUrlInput) repoUrlInput.value = urlGuardada;
     }
     const urlSecundariaGuardada = localStorage.getItem('last_github_repo_secondary');
     if (urlSecundariaGuardada) {
-        document.getElementById('repoUrlSecundario').value = urlSecundariaGuardada;
+        const repoUrlSecundarioInput = document.getElementById('repoUrlSecundario');
+        if (repoUrlSecundarioInput) repoUrlSecundarioInput.value = urlSecundariaGuardada;
     }
     const limitGuardado = localStorage.getItem('last_limit_select');
     if (limitGuardado) {
-        document.getElementById('limitSelect').value = limitGuardado;
+        const limitSelectInput = document.getElementById('limitSelect');
+        if (limitSelectInput) limitSelectInput.value = limitGuardado;
     }
 });
 
@@ -67,7 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
 function aplicarOrdenPrefijada(clavePlantilla) {
     const textoInyectar = PLANTILLAS_ORDENES[clavePlantilla];
     if (textoInyectar) {
-        document.getElementById('instrucciones').value = textoInyectar;
+        const instruccionesInput = document.getElementById('instrucciones');
+        if (instruccionesInput) instruccionesInput.value = textoInyectar;
     }
 }
 
@@ -109,10 +111,12 @@ function actualizarDesplegableHistorial() {
     
     select.style.display = 'block';
     
-    // Listener para rellenar el input al seleccionar una opción
+    // MODIFICADO: Evitar fugas de memoria sobreescribiendo el callback limpiamente con addEventListener controlado
+    select.onchange = null; 
     select.onchange = (e) => {
         if (e.target.value) {
-            document.getElementById('repoUrl').value = e.target.value;
+            const repoUrlInput = document.getElementById('repoUrl');
+            if (repoUrlInput) repoUrlInput.value = e.target.value;
         }
     };
 }
@@ -120,27 +124,39 @@ function actualizarDesplegableHistorial() {
 // Función limpia para resetear toda la interfaz (Trabajo anterior)
 function limpiarInterfaz() {
     // Limpiar inputs de texto y selectores de órdenes
-    document.getElementById('repoUrl').value = '';
-    document.getElementById('repoUrlSecundario').value = '';
-    document.getElementById('instrucciones').value = '';
-    document.getElementById('ordenesPredeterminadas').value = '';
+    const repoUrl = document.getElementById('repoUrl');
+    const repoUrlSecundario = document.getElementById('repoUrlSecundario');
+    const instrucciones = document.getElementById('instrucciones');
+    const ordenesPredeterminadas = document.getElementById('ordenesPredeterminadas');
+    
+    if (repoUrl) repoUrl.value = '';
+    if (repoUrlSecundario) repoUrlSecundario.value = '';
+    if (instrucciones) instrucciones.value = '';
+    if (ordenesPredeterminadas) ordenesPredeterminadas.value = '';
     
     // Ocultar contenedores de prompts y vistas previas
-    document.getElementById('previewBox').style.display = "none";
-    document.getElementById('queueContainer').style.display = "none";
+    const previewBox = document.getElementById('previewBox');
+    const queueContainer = document.getElementById('queueContainer');
+    if (previewBox) previewBox.style.display = "none";
+    if (queueContainer) queueContainer.style.display = "none";
     
     // Resetear estados del estado/loader
     const status = document.getElementById('statusCarga');
-    status.style.display = "none";
-    status.innerText = "";
+    if (status) {
+        status.style.display = "none";
+        status.innerText = "";
+    }
     
     // Alternar visibilidad de botones (Ocultar reset, mostrar Generar limpio)
     const btnGenerar = document.getElementById('btnGenerar');
-    btnGenerar.disabled = false;
-    btnGenerar.innerText = "⚡ GENERAR PROMPTS";
-    btnGenerar.style.display = "block";
+    if (btnGenerar) {
+        btnGenerar.disabled = false;
+        btnGenerar.innerText = "⚡ GENERAR PROMPTS";
+        btnGenerar.style.display = "block";
+    }
     
-    document.getElementById('btnReset').style.display = "none";
+    const btnReset = document.getElementById('btnReset');
+    if (btnReset) btnReset.style.display = "none";
     
     // Forzar actualización del selector de historial
     actualizarDesplegableHistorial();
@@ -173,24 +189,35 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
     if (!response.ok) throw new Error(`No se pudo acceder al repositorio: ${datosRepo.repo}`);
     
     const archivos = await response.json();
+    
+    // MODIFICADO: Validación preventiva de estructura de respuesta por límites de API de GitHub (Rate Limit de IP)
+    if (!Array.isArray(archivos)) {
+        throw new Error(`La API de GitHub no retornó un árbol válido de archivos. Límite de peticiones excedido.`);
+    }
 
     for (const archivo of archivos) {
         if (archivo.type === 'file') {
             const tieneExtensionValida = extensionesPermitidas.some(ext => archivo.name.endsWith(ext));
             
             if (tieneExtensionValida && archivo.name !== 'package-lock.json') {
-                nombresArchivos.push(archivo.name);
-                
-                const resContenido = await fetch(archivo.download_url);
-                const texto = await resContenido.text();
-                
-                let bloque = `\n=========================================\n`;
-                bloque += `REPOSITORIO: ${datosRepo.repo} (${esPrincipal ? 'PRINCIPAL' : 'REFERENCIA SECUNDARIA'})\n`;
-                bloque += `ARCHIVO: ${archivo.name}\n`;
-                bloque += `=========================================\n`;
-                bloque += `${texto}\n`;
-                
-                bloques.push(bloque);
+                // MODIFICADO: Aislamiento interno mediante try/catch por archivo para que un fallo de red individual no tumbe todo el proceso
+                try {
+                    const resContenido = await fetch(archivo.download_url);
+                    if (!resContenido.ok) continue; 
+                    
+                    const texto = await resContenido.text();
+                    nombresArchivos.push(archivo.name);
+                    
+                    let bloque = `\n=========================================\n`;
+                    bloque += `REPOSITORIO: ${datosRepo.repo} (${esPrincipal ? 'PRINCIPAL' : 'REFERENCIA SECUNDARIA'})\n`;
+                    bloque += `ARCHIVO: ${archivo.name}\n`;
+                    bloque += `=========================================\n`;
+                    bloque += `${texto}\n`;
+                    
+                    bloques.push(bloque);
+                } catch (errArchivo) {
+                    console.warn(`No se pudo descargar el contenido de ${archivo.name}:`, errArchivo);
+                }
             }
         }
     }
@@ -198,10 +225,16 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
 }
 
 async function construirSuperPrompt() {
-    const urlInput = document.getElementById('repoUrl').value.trim();
-    const urlSecundariaInput = document.getElementById('repoUrlSecundario').value.trim();
-    const instrucciones = document.getElementById('instrucciones').value.trim();
-    const MAX_CARACTERES_POR_PROMPT = parseInt(document.getElementById('limitSelect').value);
+    const urlInputEl = document.getElementById('repoUrl');
+    const urlSecundariaInputEl = document.getElementById('repoUrlSecundario');
+    const instruccionesEl = document.getElementById('instrucciones');
+    const limitSelectEl = document.getElementById('limitSelect');
+    
+    const urlInput = urlInputEl ? urlInputEl.value.trim() : '';
+    const urlSecundariaInput = urlSecundariaInputEl ? urlSecundariaInputEl.value.trim() : '';
+    const instrucciones = instruccionesEl ? instruccionesEl.value.trim() : '';
+    const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 15000;
+    
     const btn = document.getElementById('btnGenerar');
     const btnReset = document.getElementById('btnReset');
     const status = document.getElementById('statusCarga');
@@ -245,10 +278,12 @@ async function construirSuperPrompt() {
         }
     }
 
-    btn.disabled = true;
-    status.style.display = "block";
-    status.style.color = "#38bdf8";
-    status.innerText = "⏳ Leyendo estructura del repositorio principal...";
+    if (btn) btn.disabled = true;
+    if (status) {
+        status.style.display = "block";
+        status.style.color = "#38bdf8";
+        status.innerText = "⏳ Leyendo estructura del repositorio principal...";
+    }
 
     try {
         let todosLosBloquesArchivos = [];
@@ -266,7 +301,7 @@ async function construirSuperPrompt() {
 
         // 2. Cargar repositorio secundario si ha sido provisto
         if (datosRepoSecundario) {
-            status.innerText = "⏳ Leyendo estructura del repositorio secundario...";
+            if (status) status.innerText = "⏳ Leyendo estructura del repositorio secundario...";
             const resultadoSecundario = await obtenerBloquesCodigo(datosRepoSecundario, false);
             if (resultadoSecundario.nombresArchivos.length > 0) {
                 todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoSecundario.bloques);
@@ -275,7 +310,7 @@ async function construirSuperPrompt() {
             }
         }
 
-        status.innerText = "⏳ Armando secuencia de prompts...";
+        if (status) status.innerText = "⏳ Armando secuencia de prompts...";
 
         // --- LÓGICA DE SEGMENTACIÓN EN VARIOS PROMPTS ---
         let listaPromptsAGenerar = [];
@@ -345,25 +380,31 @@ async function construirSuperPrompt() {
         });
 
         // --- RENDERIZADO DE LA NUEVA COLA DE COPIADO ---
-        status.style.color = "#10b981";
-        status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
+        if (status) {
+            status.style.color = "#10b981";
+            status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
+        }
         
-        btn.innerText = "✅ COLA LISTA";
-        btn.disabled = true;
-        btn.style.display = "none";
-        btnReset.style.display = "block";
+        if (btn) {
+            btn.innerText = "✅ COLA LISTA";
+            btn.disabled = true;
+            btn.style.display = "none";
+        }
+        if (btnReset) btnReset.style.display = "block";
         
-        previewBox.style.display = "block";
-        listaArchivos.innerHTML = htmlPreviewArchivos + 
-            `<br><small style="color: #94a3b8; display:block; margin-top:15px;">El código se dividió en **${totalPartes} parte(s)** basado en el límite de ${(MAX_CARACTERES_POR_PROMPT/1000)}k caracteres.</small>`;
+        if (previewBox) previewBox.style.display = "block";
+        if (listaArchivos) {
+            listaArchivos.innerHTML = htmlPreviewArchivos + 
+                `<br><small style="color: #94a3b8; display:block; margin-top:15px;">El código se dividió en **${totalPartes} parte(s)** basado en el límite de ${(MAX_CARACTERES_POR_PROMPT/1000)}k caracteres.</small>`;
+        }
 
-        queueContainer.style.display = "block";
-        partQueue.innerHTML = "";
+        if (queueContainer) queueContainer.style.display = "block";
+        if (partQueue) partQueue.innerHTML = "";
 
         if (totalPartes === 1) {
             copiarParte(0);
         } else {
-            btnCopiarTodo.style.display = "block";
+            if (btnCopiarTodo) btnCopiarTodo.style.display = "block";
             promptsFinalesListos.forEach((_, index) => {
                 const div = document.createElement('div');
                 div.className = 'queue-item';
@@ -372,17 +413,21 @@ async function construirSuperPrompt() {
                     <span class="queue-item-info">Parte ${index + 1} de ${totalPartes} (${(promptsFinalesListos[index].length / 1024).toFixed(1)} KB)</span>
                     <button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar</button>
                 `;
-                partQueue.appendChild(div);
+                if (partQueue) partQueue.appendChild(div);
             });
             copiarParte(0);
         }
 
     } catch (e) {
-        status.style.color = "#ef4444";
-        status.innerText = `❌ Error: ${e.message}`;
+        if (status) {
+            status.style.color = "#ef4444";
+            status.innerText = `❌ Error: ${e.message}`;
+        }
         console.error(e);
-        btn.disabled = false;
-        btn.innerText = "⚡ GENERAR PROMPTS";
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = "⚡ GENERAR PROMPTS";
+        }
     }
 }
 
@@ -417,9 +462,11 @@ async function copiarTodoElPrompt() {
     try {
         await navigator.clipboard.writeText(todoUnido);
         const btn = document.getElementById('btnCopiarTodo');
-        btn.innerText = "✅ ¡Todo Copiado de Golpe!";
-        btn.disabled = true;
-        btn.style.background = "#475569";
+        if (btn) {
+            btn.innerText = "✅ ¡Todo Copiado de Golpe!";
+            btn.disabled = true;
+            btn.style.background = "#475569";
+        }
     } catch (err) {
         alert("Error al copiar.");
     }
