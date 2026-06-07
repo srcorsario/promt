@@ -1,5 +1,5 @@
 // Variable que controla la versión del script lógico
-const VER_APP = "2.2.0";
+const VER_APP = "2.2.1"; // Actualizado a v2.2.1 para control de caché
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -8,10 +8,23 @@ let promptsFinalesListos = [];
 const PLANTILLAS_ORDENES = {
     analizar: "Analiza detalladamente la arquitectura de este proyecto. Explica cómo se comunican los componentes, los flujos de datos principales y enumera las dependencias críticas detectadas.",
     bugs: "Revisa exhaustivamente todo el código provisto en busca de errores de lógica, fallas de seguridad potenciales, fugas de memoria o malas prácticas. Muestra los puntos críticos y propón sus correcciones exactas.",
-    refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
+    refactor: "Actúa como un ingeniero de software expert en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
     documentar: "Generar la documentación técnica correspondiente para las funciones y módulos clave de este repositorio. Añade comentarios claros y estructuras de tipo JSDoc/comentarios descriptivos donde falten.",
     test: "Examina los flujos lógicos y genera una estrategia integral de pruebas unitarias. Detalla qué casos de prueba y escenarios límite (edge cases) se deben validar de forma prioritaria en base a los archivos adjuntos."
 };
+
+/**
+ * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTICAMENTE)
+ * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
+ */
+const REGLAS_EMPAQUETADO_SISTEMA = 
+`\n\n=========================================\n` +
+`NORMAS DE SALIDA OBLIGATORIAS PARA LA IA:\n` +
+`=========================================\n` +
+`1. Cuando respondas implementando el OBJETIVO o procesando los archivos, debes devolver los ARCHIVOS MODIFICADOS EN SU TOTALIDAD (Código completo, sin recortes, sin omitir funciones funcionales y sin usar comentarios del tipo '// ... resto del código').\n` +
+`2. Si un archivo provisto en el contexto NO necesita sufrir modificaciones para cumplir el objetivo, NO muestres su código. Simplemente indica de forma clara y breve: "El archivo [nombre_archivo] no requiere modificaciones".\n` +
+`3. No reescribas ni alteres la lógica de los componentes que ya funcionan a menos que sea estrictamente necesario para cumplir el objetivo solicitado.\n` +
+`4. Cada vez que proveas un código modificado, lista de manera clara los elementos agregados o eliminados en comparación con la versión que te fue entregada.`;
 
 // Cargar las últimas URLs y el historial al iniciar la página
 document.addEventListener('DOMContentLoaded', () => {
@@ -295,10 +308,14 @@ async function construirSuperPrompt() {
                 textoPrompt += `A partir de aquí ya tienes todo el contexto cargado.\n\n`;
                 
                 if (instrucciones) {
-                    textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL:\n${instrucciones}\n\n`;
+                    textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL:\n${instrucciones}\n`;
                 } else {
-                    textoPrompt += `OBJETIVO: Analiza la estructura del código actual de los repositorios cargados para responder a mis próximas preguntas.\n\n`;
+                    textoPrompt += `OBJETIVO: Analiza la estructura del código actual de los repositorios cargados para responder a mis próximas preguntas.\n`;
                 }
+                
+                // INYECCIÓN INTRÍNSECA AUTOMÁTICA DE COMPORTAMIENTO
+                textoPrompt += REGLAS_EMPAQUETADO_SISTEMA;
+                textoPrompt += `\n\n`;
             }
 
             textoPrompt += `ESTRUCTURA DEL CÓDIGO (PARTE ${numeroParte}):\n`;
