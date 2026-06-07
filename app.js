@@ -1,5 +1,5 @@
 // Variable que controla la versión del script lógico
-const VER_APP = "2.2.2"; // Actualizado a v2.2.2 para control de caché
+const VER_APP = "2.2.3"; // Actualizado a v2.2.3 para normas IA
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -18,10 +18,6 @@ const PLANTILLAS_ORDENES = {
  * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
  */
 
-/**
- * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTIMAMENTE)
- * Estas reglas obligan a la IA a retornar siempre el código completo sin intervenciones del usuario.
- */
 
 const REGLAS_EMPAQUETADO_SISTEMA = 
 `\n\n=========================================\n` +
