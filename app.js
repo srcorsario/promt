@@ -23,7 +23,6 @@ async function construirSúperPrompt() {
     localStorage.setItem('last_github_repo', urlInput);
 
     // Procesar la URL de navegación normal para convertirla en API de GitHub
-    // Soporta: https://github.com/usuario/repo/tree/rama o solo https://github.com/usuario/repo
     const regex = /github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+))?/;
     const match = urlInput.match(regex);
 
@@ -51,17 +50,16 @@ async function construirSúperPrompt() {
         
         status.innerText = "⏳ Extrayendo el contenido de los archivos...";
         
-        let bloqueCodigoCompleto = "";
+        let bloquesArchivos = [];
         let archivosContados = [];
 
-        // Filtro: Solo nos interesan archivos comunes de código en la raíz (evitamos imágenes pesadas o carpetas ocultas)
+        // Filtro: Solo nos interesan archivos comunes de código en la raíz
         const extensionesPermitidas = ['.js', '.html', '.css', '.json', '.txt', '.md'];
 
         for (const archivo of archivos) {
             if (archivo.type === 'file') {
                 const tieneExtensionValida = extensionesPermitidas.some(ext => archivo.name.endsWith(ext));
                 
-                // Excluimos configuraciones pesadas de node o similares si las hubiera
                 if (tieneExtensionValida && archivo.name !== 'package-lock.json') {
                     archivosContados.push(archivo.name);
                     
@@ -69,11 +67,12 @@ async function construirSúperPrompt() {
                     const resContenido = await fetch(archivo.download_url);
                     const texto = await resContenido.text();
                     
-                    // Formatear cada bloque con etiquetas claras para la IA
-                    bloqueCodigoCompleto += `\n=========================================\n`;
-                    bloqueCodigoCompleto += `ARCHIVO: ${archivo.name}\n`;
-                    bloqueCodigoCompleto += `=========================================\n`;
-                    bloqueCodigoCompleto += `${texto}\n`;
+                    let bloque = `\n=========================================\n`;
+                    bloque += `ARCHIVO: ${archivo.name}\n`;
+                    bloque += `=========================================\n`;
+                    bloque += `${texto}\n`;
+                    
+                    bloquesArchivos.push(bloque);
                 }
             }
         }
@@ -82,36 +81,113 @@ async function construirSúperPrompt() {
             throw new Error("No se encontraron archivos de texto legibles (.js, .html, .css...) en la raíz.");
         }
 
-        // --- CONSTRUCCIÓN DEL PROMPT FINAL ---
-        let promptFinal = `Hola. Estoy trabajando en un proyecto alojado en GitHub llamado "${repo}".\n`;
-        promptFinal += `A continuación te proporciono el contenido completo de los archivos clave para que tengas el contexto total.\n\n`;
-        
-        if (instrucciones) {
-            promptFinal += `OBJETIVO / CONSULTA PRINCIPAL:\n${instrucciones}\n\n`;
-        } else {
-            promptFinal += `OBJETIVO: Analiza la estructura del código actual para responder a mis próximas preguntas.\n\n`;
+        // --- LÓGICA DE SEGMENTACIÓN EN VARIOS PROMPTS ---
+        const MAX_CARACTERES_POR_PROMPT = 15000;
+        let listaPromptsAGenerar = [];
+        let acumuladorBloquesTexto = "";
+
+        for (let i = 0; i < bloquesArchivos.length; i++) {
+            // Si un solo archivo es extremadamente largo o el acumulador supera el límite, fragmentamos
+            if ((acumuladorBloquesTexto + bloquesArchivos[i]).length > MAX_CARACTERES_POR_PROMPT && acumuladorBloquesTexto !== "") {
+                listaPromptsAGenerar.push(acumuladorBloquesTexto);
+                acumuladorBloquesTexto = bloquesArchivos[i];
+            } else {
+                acumuladorBloquesTexto += bloquesArchivos[i];
+            }
+        }
+        if (acumuladorBloquesTexto !== "") {
+            listaPromptsAGenerar.push(acumuladorBloquesTexto);
         }
 
-        promptFinal += `ESTRUCTURA DEL CÓDIGO:\n`;
-        promptFinal += bloqueCodigoCompleto;
-        promptFinal += `\n=========================================\n`;
-        promptFinal += `FIN DEL CONTEXTO. Por favor, confirma que has entendido el proyecto completo y estás listo para ayudarme.`;
+        // --- CONSTRUCCIÓN DE LA SECUENCIA DE COPIADO ---
+        let promptsFinalesListos = [];
+        const totalPartes = listaPromptsAGenerar.length;
 
-        // Copiar el resultado al portapapeles automáticamente
-        await navigator.clipboard.writeText(promptFinal);
+        listaPromptsAGenerar.forEach((contenidoCodigo, index) => {
+            const numeroParte = index + 1;
+            let textoPrompt = "";
 
-        // Actualizar interfaz visual con lo que se envió
-        status.style.color = "#10b981";
-        status.innerText = "✨ ¡Súper-Prompt copiado al portapapeles! Ya puedes pegarlo en la IA.";
+            if (numeroParte === 1) {
+                textoPrompt += `Hola. Estoy trabajando en un proyecto alojado en GitHub llamado "${repo}".\n`;
+                textoPrompt += `A continuación te proporciono el contexto de mis archivos clave dividido en ${totalPartes} partes debido a limitaciones de espacio.\n`;
+                textoPrompt += `CRÍTICO: Esta es la PARTE ${numeroParte} de ${totalPartes}. NO respondas ni analices todavía. Solo di "Recibido parte ${numeroParte}" y espera a las siguientes partes.\n\n`;
+                
+                if (instrucciones) {
+                    textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL (Para tu conocimiento previo):\n${instrucciones}\n\n`;
+                }
+            } else if (numeroParte < totalPartes) {
+                textoPrompt += `Esta es la PARTE ${numeroParte} de ${totalPartes} del contexto del proyecto "${repo}".\n`;
+                textoPrompt += `CRÍTICO: NO respondas ni ejecutes ninguna acción todavía. Solo di "Recibido parte ${numeroParte}" y sigue esperando el resto del código.\n\n`;
+            } else {
+                textoPrompt += `Esta es la PARTE FINAL (${numeroParte} de ${totalPartes}) del contexto del proyecto "${repo}".\n`;
+                textoPrompt += `A partir de aquí ya tienes todo el contexto cargado.\n\n`;
+                
+                if (instrucciones) {
+                    textoPrompt += `OBJETIVO / CONSULTA PRINCIPAL:\n${instrucciones}\n\n`;
+                } else {
+                    textoPrompt += `OBJETIVO: Analiza la estructura del código actual para responder a mis próximas preguntas.\n\n`;
+                }
+            }
+
+            textoPrompt += `ESTRUCTURA DEL CÓDIGO (PARTE ${numeroParte}):\n`;
+            textoPrompt += contenidoCodigo;
+            textoPrompt += `\n=========================================\n`;
+            
+            if (numeroParte === totalPartes) {
+                textoPrompt += `FIN DEL CONTEXTO. Por favor, procesa toda la información recibida desde la Parte 1 y responde a mi objetivo.\n`;
+                textoPrompt += `Eso es todo`;
+            } else {
+                textoPrompt += `FIN DE LA PARTE ${numeroParte}. Espera el siguiente prompt.`;
+            }
+
+            promptsFinalesListos.push(textoPrompt);
+        });
+
+        // Configurar el asistente de copiado en el botón
+        let parteActualParaCopiar = 0;
+
+        const gestionarCopiadoSecuencial = async () => {
+            if (parteActualParaCopiar < totalPartes) {
+                await navigator.clipboard.writeText(promptsFinalesListos[parteActualParaCopiar]);
+                parteActualParaCopiar++;
+                
+                if (parteActualParaCopiar < totalPartes) {
+                    status.style.color = "#38bdf8";
+                    status.innerText = `📋 Parte ${parteActualParaCopiar} copiada. Haz clic de nuevo para copiar la Parte ${parteActualParaCopiar + 1}/${totalPartes}`;
+                    btn.innerText = `📋 COPIAR PARTE ${parteActualParaCopiar + 1} DE ${totalPartes}`;
+                } else {
+                    status.style.color = "#10b981";
+                    status.innerText = `✨ ¡Todas las partes (${totalPartes}/${totalPartes}) han sido copiadas e introducidas!`;
+                    btn.innerText = `⚡ REGENERAR PROMPTS`;
+                    btn.onclick = () => location.reload(); // Restablecer el estado
+                }
+            }
+        };
+
+        // Copiar la primera parte de forma automática inmediatamente
+        await navigator.clipboard.writeText(promptsFinalesListos[0]);
+        parteActualParaCopiar = 1;
+
+        if (totalPartes > 1) {
+            status.style.color = "#38bdf8";
+            status.innerText = `📋 Parte 1 de ${totalPartes} copiada automáticamente. Ve a la IA, pégala y luego vuelve aquí para presionar el botón de la Parte 2.`;
+            btn.innerText = `📋 COPIAR PARTE 2 DE ${totalPartes}`;
+            btn.disabled = false;
+            btn.onclick = gestionarCopiadoSecuencial;
+        } else {
+            status.style.color = "#10b981";
+            status.innerText = "✨ ¡Súper-Prompt único copiado al portapapeles! Ya puedes pegarlo en la IA.";
+            btn.disabled = false;
+        }
         
         previewBox.style.display = "block";
-        listaArchivos.innerHTML = archivosContados.map(name => `<span class="file-tag">📄 ${name}</span>`).join('');
+        listaArchivos.innerHTML = archivosContados.map(name => `<span class="file-tag">📄 ${name}</span>`).join('') + 
+            `<br><small style="color: #94a3b8; display:block; margin-top:10px;">El código se dividió en **${totalPartes} parte(s)** para prevenir recortes de la IA.</small>`;
 
     } catch (e) {
         status.style.color = "#ef4444";
         status.innerText = `❌ Error: ${e.message}`;
         console.error(e);
-    } finally {
         btn.disabled = false;
     }
 }
