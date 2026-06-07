@@ -65,7 +65,7 @@ async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
 // Variables globales para la nueva cola de copiado
 let promptsFinalesListos = [];
 
-async function construirSúperPrompt() {
+async function construirSuperPrompt() {
     const urlInput = document.getElementById('repoUrl').value.trim();
     const urlSecundariaInput = document.getElementById('repoUrlSecundario').value.trim();
     const instrucciones = document.getElementById('instrucciones').value.trim();
@@ -219,10 +219,8 @@ async function construirSúperPrompt() {
         partQueue.innerHTML = "";
 
         if (totalPartes === 1) {
-            // Si solo es 1 parte, copiar directamente
             copiarParte(0);
         } else {
-            // Renderizar la cola visual
             btnCopiarTodo.style.display = "block";
             promptsFinalesListos.forEach((_, index) => {
                 const div = document.createElement('div');
@@ -234,7 +232,6 @@ async function construirSúperPrompt() {
                 `;
                 partQueue.appendChild(div);
             });
-            // Auto-copiar la primera parte y hacer foco en el segundo botón
             copiarParte(0);
         }
 
@@ -246,7 +243,7 @@ async function construirSúperPrompt() {
     }
 }
 
-// --- NUEVAS FUNCIONES DE COPIADO RÁPIDO ---
+// --- FUNCIONES DE COPIADO RÁPIDO ---
 
 async function copiarParte(index) {
     if (!promptsFinalesListos[index]) return;
@@ -264,13 +261,10 @@ async function copiarParte(index) {
             item.classList.add('copied');
         }
 
-        // Auto-enfocar el siguiente botón si existe
         const nextIndex = index + 1;
         const nextBtn = document.getElementById(`copyBtn-${nextIndex}`);
         if (nextBtn) {
             nextBtn.focus();
-            nextBtn.classList.add('pulse'); // Pequeño efecto visual
-            setTimeout(() => nextBtn.classList.remove('pulse'), 1000);
         }
     } catch (err) {
         alert("Error al copiar al portapapeles. Asegúrate de darle permisos al navegador.");
@@ -280,9 +274,7 @@ async function copiarParte(index) {
 async function copiarTodoElPrompt() {
     if (promptsFinalesListos.length === 0) return;
     
-    // Unir todo con separadores dobles para que la IA entienda que son bloques distintos
     const todoUnido = promptsFinalesListos.map((p, i) => {
-        // Limpiar las instrucciones de "espera la siguiente parte" si lo unimos todo
         let cleanP = p.replace("FIN DE LA PARTE. Espera el siguiente prompt.", "FIN DEL BLOQUE DE ARCHIVOS.");
         cleanP = cleanP.replace("CRÍTICO: NO respondas ni ejecutes ninguna acción todavía. Solo di \"Recibido parte\" y sigue esperando el resto del código.", "CONTINÚA LEYENDO EL SIGUIENTE BLOQUE.");
         return cleanP;
