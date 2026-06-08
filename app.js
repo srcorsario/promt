@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.6.4 para añadir cálculo visual de tokens
-const VER_APP = "2.6.4"; 
+// MODIFICADO: Versión actualizada a v2.6.5 para corregir la detención obligatoria de la IA en prompts por partes
+const VER_APP = "2.6.5"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -38,7 +38,7 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `15. INTEGRIDAD REPOSITORIO DE DATOS: Queda estrictamente prohibido recortar, resumir o usar comentarios elípticos en objetos de configuración, estructuras JSON, arrays extensos de datos o diccionarios globales de constantes preexistentes dentro de los archivos devueltos. Deben reescribirse completos elemento por elemento.\n` +
 `16. AUTOSUFICIENCIA LOGICA: No asumas ni invoques funciones, utilidades globales, ni variables de estado que no estén explícitamente declaradas en los archivos provistos. Si el objetivo requiere lógica adicional, debes programar su solución por completo de forma explícita y visible dentro del código modificado.\n` +
 `17. EXISTENCIA VERIFICABLE DE ARCHIVOS: No puedes mencionar, modificar, importar, extender ni referenciar archivos que no hayan sido incluidos explícitamente dentro del contexto recibido. Si una funcionalidad depende de un archivo inexistente en el contexto, debes indicarlo expresamente en lugar de asumir su existencia.\n` +
-`18. TRAZABILIDAD FUNCIONAL: No afirmes que existe una funcionalidad, flujo, endpoint, proceso, evento, API o comportamiento si no puede inferirse directamente del código proporcionado. Diferencia claramente entre hechos observados y propuestas de mejora.\n` +
+`18. TRAZABILIDAD FUNCIONAL: No afirme que existe una funcionalidad, flujo, endpoint, proceso, evento, API o comportamiento si no puede inferirse directamente del código proporcionado. Diferencia claramente entre hechos observados y propuestas de mejora.\n` +
 `19. DEPENDENCIAS EXPLÍCITAS: Antes de utilizar cualquier librería, API, framework o paquete, verifica que aparezca explícitamente en los archivos proporcionados. Si no aparece, no puede utilizarse ni asumirse su disponibilidad.\n` +
 `20. CONSISTENCIA INTERARCHIVOS: Toda modificación realizada en un archivo debe ser compatible con los demás archivos proporcionados. Está prohibido generar referencias rotas, firmas incompatibles o llamadas a funciones que ya no coincidan con su definición original.\n` +
 `21. INFORME DE IMPACTO: Antes de mostrar el código modificado, indica brevemente qué archivos fueron afectados y por qué fue necesario modificarlos.\n` +
@@ -254,12 +254,15 @@ async function construirSuperPrompt() {
         if (acumulador !== "") listaPromptsAGenerar.push(acumulador);
         promptsFinalesListos = [];
         const totalPartes = listaPromptsAGenerar.length;
+        
+        // MODIFICADO: Bloque optimizado de inyección y estructuración de la secuencia de partes
         listaPromptsAGenerar.forEach((contenido, index) => {
             const num = index + 1;
             let texto = "";
             if (num === 1) {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n`;
-                if (instrucciones) texto += `OBJETIVO: ${instrucciones}\n\n`;
+                // MODIFICADO: Advertencia explícita en el objetivo inicial para frenar a la IA
+                if (instrucciones) texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
             } else if (num < totalPartes) {
                 texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
             } else {
@@ -267,9 +270,21 @@ async function construirSuperPrompt() {
                 texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
             }
             texto += `ESTRUCTURA DEL CÓDIGO (PARTE ${num}):\n${contenido}\n`;
-            texto += (num === totalPartes) ? `FIN DEL CONTEXTO. Procesa todo.` : `Esperando parte ${num + 1}`;
+            
+            // MODIFICADO: Inyección de un muro de contención estricto e inequívoco para partes intermedias
+            if (num === totalPartes) {
+                texto += `\nFIN DEL CONTEXTO. Procesa todo el material provisto y ejecuta el OBJETIVO cumpliendo estrictamente con las NORMAS DE SALIDA OBLIGATORIAS.`;
+            } else {
+                texto += `\n=========================================\n`;
+                texto += `🛑 ¡INSTRUCCIÓN CRÍTICA DE CONTROL PARA LA IA! 🛑\n`;
+                texto += `Este mensaje es SOLO la Parte ${num} de un total de ${totalPartes} partes de contexto.\n`;
+                texto += `Está ABSOLUTAMENTE PROHIBIDO empezar a ejecutar el objetivo, analizar el código o generar respuestas técnicas todavía.\n`;
+                texto += `Para confirmar que has entendido que debes esperar a las partes restantes, responde EXCLUSIVAMENTE con la siguiente línea de texto, sin añadir saludos, disculpas ni comentarios adicionales:\n\n`;
+                texto += `"Entendido. Parte ${num} recibida y almacenada en contexto. Quedo a la espera de la Parte ${num + 1}."`;
+            }
             promptsFinalesListos.push(texto);
         });
+        
         status.style.color = "#10b981";
         status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
         if (btn) { btn.innerText = "✅ COLA LISTA"; btn.disabled = true; btn.style.display = "none"; }
@@ -281,7 +296,6 @@ async function construirSuperPrompt() {
         if (totalPartes === 1) { copiarParte(0); } else {
             if (btnCopiarTodo) btnCopiarTodo.style.display = "block";
             promptsFinalesListos.forEach((_, index) => {
-                // NUEVO: Calculo aproximado de tokens para la parte actual
                 const textoParte = promptsFinalesListos[index];
                 const charCount = textoParte.length;
                 const minTokens = Math.round(charCount / 4);
@@ -290,7 +304,6 @@ async function construirSuperPrompt() {
                 const div = document.createElement('div');
                 div.className = 'queue-item';
                 div.id = `queue-item-${index}`;
-                // MODIFICADO: Inyección visual de los tokens aproximados al lado del número de parte
                 div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes} <span style="color:#94a3b8; font-size:0.85rem; font-weight:400;">(Entre ${minTokens.toLocaleString()}/${maxTokens.toLocaleString()} tokens aprox)</span></span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
                 partQueue.appendChild(div);
             });
