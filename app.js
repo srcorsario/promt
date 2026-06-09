@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.6.6 para corregir la inyección del OBJETIVO en la parte final y el manejo de prompts de una sola parte
-const VER_APP = "2.6.6"; 
+// MODIFICADO: Versión actualizada a v2.7.0 - Reserva dinámica de espacio y Protocolo de Inicialización
+const VER_APP = "2.7.0"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -46,6 +46,16 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `23. CONSERVACIÓN FUNCIONAL: No elimines funciones, bloques, estilos, estructuras HTML o configuraciones existentes salvo que el objetivo solicitado requiera explícitamente su eliminación. Toda eliminación debe justificarse de forma explícita.\n` +
 `24. VALIDACIÓN PREVIA DE RESPUESTA: Antes de entregar el resultado final, verifica que el código generado no contenga referencias a variables inexistentes, funciones inexistentes, imports faltantes o elementos eliminados accidentalmente.\n` +
 `25. ORDEN DE PRIORIDAD: En caso de conflicto entre optimización, refactorización, limpieza de código y preservación del comportamiento existente, debe prevalecer siempre la preservación del comportamiento actual del sistema.\n`;
+
+// NUEVO: Protocolo de inicialización para la Parte 1
+const PROTOCOLO_INICIO = 
+`=========================================\n` +
+`PROTOCOLO DE TRANSMISIÓN DE CONTEXTO\n` +
+`=========================================\n` +
+`Estás a punto de recibir el código fuente de un proyecto de software dividido en múltiples partes.\n` +
+`- Tu ÚNICA función en las partes intermedias es almacenar el contexto en tu memoria temporal.\n` +
+`- Está PROHIBIDO procesar, analizar o ejecutar el OBJETIVO hasta que recibas la parte FINAL.\n` +
+`- En la parte FINAL recibirás la orden de ejecución junto con las NORMAS DE SALIDA OBLIGATORIAS.\n\n`;
 
 document.addEventListener('DOMContentLoaded', () => {
     const versionBadgeApp = document.getElementById('versionApp');
@@ -198,6 +208,12 @@ async function construirSuperPrompt() {
     const partQueue = document.getElementById('partQueue');
     const btnCopiarTodo = document.getElementById('btnCopiarTodo');
     if (!urlInput) { alert("Por favor, introduce una URL de GitHub principal."); return; }
+    
+    // NUEVO: Alerta visual si el prompt del usuario es excesivamente largo para el límite
+    if (instrucciones && instrucciones.length > (MAX_CARACTERES_POR_PROMPT * 0.7)) {
+        alert(`⚠️ Tu instrucción tiene ${instrucciones.length} caracteres, lo cual es muy grande para el límite de ${MAX_CARACTERES_POR_PROMPT} caracteres seleccionado. Esto podría provocar recortes o errores en la IA. Considera aumentar el límite superior o resumir tu orden.`);
+    }
+
     localStorage.setItem('last_github_repo', urlInput);
     localStorage.setItem('last_limit_select', MAX_CARACTERES_POR_PROMPT);
     guardarEnHistorial(urlInput);
@@ -238,13 +254,23 @@ async function construirSuperPrompt() {
             }
         }
         status.innerText = "⏳ Armando secuencia de prompts...";
+        
+        // NUEVO: Cálculo de Overhead para evitar cortes y desbordamientos
+        const longitudInstrucciones = instrucciones ? instrucciones.length : 0;
+        const longitudReglas = REGLAS_EMPAQUETADO_SISTEMA.length;
+        const longitudProtocolo = PROTOCOLO_INICIO.length;
+        const MARGEN_SEGURIDAD = 500; // Espacio para cabeceras y textos de control
+        
+        // El espacio máximo real disponible para código por paquete
+        const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD));
+
         let listaPromptsAGenerar = [];
         let acumulador = "";
         for (const bloque of todosLosBloquesArchivos) {
-            if (bloque.length > MAX_CARACTERES_POR_PROMPT) {
+            if (bloque.length > limiteEfectivoCodigo) {
                 if (acumulador !== "") { listaPromptsAGenerar.push(acumulador); acumulador = ""; }
                 listaPromptsAGenerar.push(bloque);
-            } else if ((acumulador + bloque).length > MAX_CARACTERES_POR_PROMPT) {
+            } else if ((acumulador + bloque).length > limiteEfectivoCodigo) {
                 listaPromptsAGenerar.push(acumulador);
                 acumulador = bloque;
             } else {
@@ -262,18 +288,19 @@ async function construirSuperPrompt() {
             const esUltima = num === totalPartes;
             let texto = "";
 
-            // NUEVO: Lógica de cabecera separada para evitar conflictos cuando esPrimera && esUltima
+            // Lógica de cabecera separada para evitar conflictos cuando esPrimera && esUltima
             if (esPrimera && esUltima) {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
             } else if (esPrimera) {
-                texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n`;
+                texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
+                texto += PROTOCOLO_INICIO; // NUEVO: Aviso de protocolo en la primera parte
             } else if (esUltima) {
                 texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
             } else {
                 texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
             }
 
-            // NUEVO: Inyección del OBJETIVO tanto en la parte 1 (con freno) como en la final (con orden de ejecución)
+            // Inyección del OBJETIVO tanto en la parte 1 (con freno) como en la final (con orden de ejecución)
             if (instrucciones) {
                 if (esPrimera && !esUltima) {
                     texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
@@ -282,7 +309,7 @@ async function construirSuperPrompt() {
                 }
             }
 
-            // NUEVO: Las reglas de empaquetado siempre van en la última parte
+            // Las reglas de empaquetado siempre van en la última parte
             if (esUltima) {
                 texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
             }
