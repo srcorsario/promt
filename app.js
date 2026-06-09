@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.6.5 para corregir la detención obligatoria de la IA en prompts por partes
-const VER_APP = "2.6.5"; 
+// MODIFICADO: Versión actualizada a v2.6.6 para corregir la inyección del OBJETIVO en la parte final y el manejo de prompts de una sola parte
+const VER_APP = "2.6.6"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -258,21 +258,39 @@ async function construirSuperPrompt() {
         // MODIFICADO: Bloque optimizado de inyección y estructuración de la secuencia de partes
         listaPromptsAGenerar.forEach((contenido, index) => {
             const num = index + 1;
+            const esPrimera = num === 1;
+            const esUltima = num === totalPartes;
             let texto = "";
-            if (num === 1) {
+
+            // NUEVO: Lógica de cabecera separada para evitar conflictos cuando esPrimera && esUltima
+            if (esPrimera && esUltima) {
+                texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
+            } else if (esPrimera) {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n`;
-                // MODIFICADO: Advertencia explícita en el objetivo inicial para frenar a la IA
-                if (instrucciones) texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
-            } else if (num < totalPartes) {
-                texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
-            } else {
+            } else if (esUltima) {
                 texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
+            } else {
+                texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
+            }
+
+            // NUEVO: Inyección del OBJETIVO tanto en la parte 1 (con freno) como en la final (con orden de ejecución)
+            if (instrucciones) {
+                if (esPrimera && !esUltima) {
+                    texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
+                } else if (esUltima) {
+                    texto += `OBJETIVO: ${instrucciones}\n\n`;
+                }
+            }
+
+            // NUEVO: Las reglas de empaquetado siempre van en la última parte
+            if (esUltima) {
                 texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
             }
+
             texto += `ESTRUCTURA DEL CÓDIGO (PARTE ${num}):\n${contenido}\n`;
             
-            // MODIFICADO: Inyección de un muro de contención estricto e inequívoco para partes intermedias
-            if (num === totalPartes) {
+            // Inyección de un muro de contención estricto e inequívoco para partes intermedias, o disparador de ejecución para la final
+            if (esUltima) {
                 texto += `\nFIN DEL CONTEXTO. Procesa todo el material provisto y ejecuta el OBJETIVO cumpliendo estrictamente con las NORMAS DE SALIDA OBLIGATORIAS.`;
             } else {
                 texto += `\n=========================================\n`;
