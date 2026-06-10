@@ -193,8 +193,7 @@
         <h1>🚀 GitHub Prompt Helper</h1>
         <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
         <div class="version-container">
-            <!-- MODIFICADO: Versión actualizada a v2.2.1 -->
-            <span class="version-badge">Index: v2.2.1</span>
+            <span class="version-badge">Index: v2.3.0</span>
             <span class="version-badge" id="versionApp">App: Cargando...</span>
         </div>
     </div>
@@ -203,11 +202,12 @@
         <div class="top-tools-bar">
             <div class="tool-item">
                 <label for="limitSelect">🧠 Contexto:</label>
+                <!-- MODIFICADO: Valores ajustados a Caracteres reales basados en tokens (~3.5 chars/token) para evitar divisiones absurdas -->
                 <select id="limitSelect">
-                    <option value="100000">Gemini 1.5 (100k)</option>
-                    <option value="60000">Claude 3.5 (60k)</option>
-                    <option value="30000">GPT-4o (30k)</option>
-                    <option value="15000" selected>Legacy (15k)</option>
+                    <option value="350000">Gemini 1.5 (100k tokens)</option>
+                    <option value="210000">Claude 3.5 (60k tokens)</option>
+                    <option value="105000">GPT-4o (30k tokens)</option>
+                    <option value="52500" selected>Legacy (15k tokens)</option>
                 </select>
             </div>
             <div class="tool-item">
