@@ -1,6 +1,7 @@
+// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 6 - POR FAVOR UNIR MENTALMENTE]
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.4 - Implementación de corte de archivos con marcas de unión para la IA
-const VER_APP = "2.7.4"; 
+// MODIFICADO: Versión actualizada a v2.7.5 - Corrección de corte de archivos grandes, cálculo de límites y advertencias de truncado
+const VER_APP = "2.7.5"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -266,7 +267,7 @@ async function construirSuperPrompt() {
         
         const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD));
 
-        // MODIFICADO: Lógica de corte de archivos con marcas explícitas y repetición de cabeceras para la IA
+        // MODIFICADO: Lógica de corte de archivos con marcas explícitas, manejo de líneas largas y cálculo exacto de partes
         let bloquesProcesados = [];
         for (const bloque of todosLosBloquesArchivos) {
             if (bloque.length <= limiteEfectivoCodigo) {
@@ -287,36 +288,50 @@ async function construirSuperPrompt() {
                 const headerStr = headerLines.join('\n') + '\n';
                 const codeLines = lineas.slice(headerLines.length);
                 
-                // Estimación de partes para las marcas
-                const totalPartes = Math.max(2, Math.ceil(codeLines.join('\n').length / (limiteEfectivoCodigo - headerStr.length - 300)));
-                
+                // NUEVO: Generar fragmentos de código puro para calcular el total exacto de partes
+                let fragmentosCodigo = [];
                 let subBloque = "";
-                let parteNum = 1;
                 
                 for (const linea of codeLines) {
-                    if ((headerStr.length + subBloque.length + linea.length + 300) > limiteEfectivoCodigo) {
+                    // NUEVO: Si una línea individual excede el límite, la aislamos en su propio fragmento para no arrastrar líneas siguientes
+                    if ((headerStr.length + linea.length + 300) > limiteEfectivoCodigo) {
                         if (subBloque.trim() !== "") {
-                            const markerStart = parteNum === 1 
-                                ? `// [🔒 ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - POR FAVOR UNIR MENTALMENTE]\n` 
-                                : `// [🔒 CONTINUACIÓN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - UNIR CON PARTE ANTERIOR]\n`;
-                            const markerEnd = parteNum < totalPartes 
-                                ? `\n// [🔒 FIN DE PARTE ${parteNum}. CONTINÚA EN LA SIGUIENTE PARTE]` 
-                                : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]`;
-                            
-                            const modifiedHeader = headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
-                            bloquesProcesados.push(modifiedHeader + markerStart + subBloque + markerEnd);
-                            parteNum++;
+                            fragmentosCodigo.push(subBloque);
+                            subBloque = "";
+                        }
+                        fragmentosCodigo.push(linea + '\n');
+                    } 
+                    else if ((headerStr.length + subBloque.length + linea.length + 300) > limiteEfectivoCodigo) {
+                        if (subBloque.trim() !== "") {
+                            fragmentosCodigo.push(subBloque);
                         }
                         subBloque = linea + '\n';
-                    } else {
+                    } 
+                    else {
                         subBloque += linea + '\n';
                     }
                 }
                 if (subBloque.trim() !== "") {
-                    const markerStart = parteNum === 1 ? "" : `// [🔒 CONTINUACIÓN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - UNIR CON PARTE ANTERIOR]\n`;
-                    const markerEnd = parteNum === 1 ? "" : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]`;
-                    const modifiedHeader = parteNum === 1 ? headerStr : headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
-                    bloquesProcesados.push(modifiedHeader + markerStart + subBloque + markerEnd);
+                    fragmentosCodigo.push(subBloque);
+                }
+
+                // NUEVO: Ahora que sabemos el total exacto, inyectar cabeceras y marcadores
+                const totalPartes = fragmentosCodigo.length;
+                for (let i = 0; i < totalPartes; i++) {
+                    const parteNum = i + 1;
+                    const codigo = fragmentosCodigo[i];
+                    
+                    const modifiedHeader = headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
+                    
+                    const markerStart = parteNum === 1 
+                        ? `// [🔒 ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - POR FAVOR UNIR MENTALMENTE]\n` 
+                        : `// [🔒 CONTINUACIÓN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - UNIR CON PARTE ANTERIOR]\n`;
+                        
+                    const markerEnd = parteNum < totalPartes 
+                        ? `\n// [🔒 FIN DE PARTE ${parteNum}. CONTINÚA EN LA SIGUIENTE PARTE]` 
+                        : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]`;
+                        
+                    bloquesProcesados.push(modifiedHeader + markerStart + codigo + markerEnd);
                 }
             }
         }
@@ -324,13 +339,16 @@ async function construirSuperPrompt() {
         let listaPromptsAGenerar = [];
         let acumulador = "";
         
-        // MODIFICADO: Algoritmo corregido para empaquetar bloques de forma compacta y codiciosa
+        // MODIFICADO: Algoritmo de empaquetado mejorado calculando el overhead real máximo de forma conservadora
+        const estimacionOverheadMaximo = longitudInstrucciones + longitudReglas + longitudProtocolo + 500; 
+        const limiteContenido = MAX_CARACTERES_POR_PROMPT - estimacionOverheadMaximo;
+
         for (const bloque of bloquesProcesados) {
             if (bloque.trim() === "") continue; 
-            if ((acumulador + bloque).length > limiteEfectivoCodigo) {
-                if (acumulador !== "") {
-                    listaPromptsAGenerar.push(acumulador);
-                }
+            if (acumulador !== "" && (acumulador.length + bloque.length) > limiteContenido) {
+                listaPromptsAGenerar.push(acumulador);
+                acumulador = bloque;
+            } else if (acumulador === "") {
                 acumulador = bloque;
             } else {
                 acumulador += bloque;
@@ -397,16 +415,21 @@ async function construirSuperPrompt() {
         if (partQueue) partQueue.innerHTML = "";
         if (totalPartes === 1) { copiarParte(0); } else {
             if (btnCopiarTodo) btnCopiarTodo.style.display = "block";
-            promptsFinalesListos.forEach((_, index) => {
-                const textoParte = promptsFinalesListos[index];
+            promptsFinalesListos.forEach((textoParte, index) => {
                 const charCount = textoParte.length;
                 const minTokens = Math.round(charCount / 4);
                 const maxTokens = Math.round(charCount / 3);
 
+                // NUEVO: Advertencia si el prompt final supera el límite seleccionado por el usuario
+                let advertencia = "";
+                if (charCount > MAX_CARACTERES_POR_PROMPT) {
+                    advertencia = `<span style="color:var(--danger); font-weight:700; margin-left:10px;">⚠️ EXCEDE LÍMITE (${charCount.toLocaleString()} / ${MAX_CARACTERES_POR_PROMPT.toLocaleString()} chars) - LA IA LO TRUNCARÁ</span>`;
+                }
+
                 const div = document.createElement('div');
                 div.className = 'queue-item';
                 div.id = `queue-item-${index}`;
-                div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes} <span style="color:#94a3b8; font-size:0.85rem; font-weight:400;">(Entre ${minTokens.toLocaleString()}/${maxTokens.toLocaleString()} tokens aprox)</span></span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
+                div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes} <span style="color:#94a3b8; font-size:0.85rem; font-weight:400;">(Entre ${minTokens.toLocaleString()}/${maxTokens.toLocaleString()} tokens aprox)</span>${advertencia}</span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
                 partQueue.appendChild(div);
             });
         }
