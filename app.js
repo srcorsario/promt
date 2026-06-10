@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.2 - Corregido desbordamiento silencioso al trocear archivos grandes y validación estricta de instrucciones
-const VER_APP = "2.7.2"; 
+// MODIFICADO: Versión actualizada a v2.7.3 - Corregido algoritmo de empaquetado para evitar paquetes ultra pequeños
+const VER_APP = "2.7.3"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -12,7 +12,6 @@ const PLANTILLAS_ORDENES = {
     refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
     documentar: "Generar la documentación técnica correspondiente para las funciones y módulos clave de este repositorio. Añade comentarios claros y estructuras de tipo JSDoc/comentarios descriptivos donde falten.",
     test: "Examina los flujos lógicos y genera una estrategia integral de pruebas unitarias. Detalla qué casos de prueba y escenarios límite (edge cases) se deben validar de forma prioritaria en base a los archivos adjuntos.",
-    // NUEVO: Orden específica para fusionar o adoptar utilidades del secundario al principal
     fusionar: "Actúa como un arquitecto de software experto en integración de sistemas. Tu objetivo es auditar el Repositorio Principal y el Repositorio de Referencia Secundaria. 1) Identifica funciones, utilidades, componentes o patrones de diseño presentes en el repositorio SECUNDARIO que puedan mejorar, optimizar o añadir funcionalidades faltantes al repositorio PRINCIPAL. 2) Para cada mejora identificada, proporciona el código exacto listo para implementar en el PRINCIPAL, adaptando la lógica para que sea 100% compatible con su arquitectura actual, sin romper flujos existentes y manejando el DOM de forma defensiva. 3) Si no encuentras nada útil que adoptar, indícalo expresamente."
 };
 
@@ -26,7 +25,7 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `1. Cuando respondas implementando el OBJETIVO o procesando los archivos, debes devolver los ARCHIVOS MODIFICADOS EN SU TOTALIDAD (Código completo, sin recortes, sin omitir funciones funcionales y sin usar comentarios del tipo '// ... resto del código').\n` +
 `2. Si un archivo provisto en el contexto NO necesita sufrir modificaciones para cumplir el objetivo, NO muestres su código. Simplemente indica de forma clara y breve: "El archivo [nombre_archivo] no requiere modificaciones".\n` +
 `3. No reescribas ni alteres la lógica de los componentes que ya funcionan a menos que sea estrictamente necesario para cumplir el objetivo solicitado.\n` +
-`4. Cada vez que proveas un código modificado, lista de manera clara los elementos agregados o eliminados en comparación con la versión que te fue entregada.\n` +
+`4. Cada vez que proveas un código modificado, lista de manera clara los elements agregados o eliminados en comparación con la versión que te fue entregada.\n` +
 `5. PRESERVACIÓN DE IDENTIFICADORES: Está estrictamente prohibido renombrar funciones, variables, identificadores HTML (id), clases CSS o claves de almacenamiento (localStorage) existentes. Mantén intacta la nomenclatura original.\n` +
 `6. ENTORNO TECNOLÓGICO: Resuelve el objetivo utilizando exclusivamente las tecnologías nativas provistas (Vanilla JS, CSS nativo, etc.). No inventes dependencias ni asumas la existencia de librerías externas que no veas explícitamente en el contexto.\n` +
 `7. MODULARIDAD SEGURA: Cualquier lógica nueva debe aislarse correctamente y no debe interferir con los listeners de ciclo de vida (como DOMContentLoaded) ni con las variables globales del sistema.\n` +
@@ -46,10 +45,10 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `21. INFORME DE IMPACTO: Antes de mostrar el código modificado, indica brevemente qué archivos fueron afectados y por qué fue necesario modificarlos.\n` +
 `22. INCERTIDUMBRE OBLIGATORIA: Cuando una decisión técnica no pueda deducirse con certeza a partir del contexto proporcionado, debes indicarlo explícitamente mediante una sección "SUPOSICIONES NECESARIAS" antes del código generado.\n` +
 `23. CONSERVACIÓN FUNCIONAL: No elimines funciones, bloques, estilos, estructuras HTML o configuraciones existentes salvo que el objetivo solicitado requiera explícitamente su eliminación. Toda eliminación debe justificarse de forma explícita.\n` +
-`24. VALIDACIÓN PREVIA DE RESPUESTA: Antes de entregar el resultado final, verifica que el código generado no contenga referencias a variables inexistentes, funciones inexistentes, imports faltantes o elementos eliminados accidentalmente.\n` +
+`24. VALIDACIÓN PREVIA DE RESPUESTA: Antes de entregar el resultado final, verifica que el código generado no contenga referencias a variables inexistentes, funciones inexistentes, imports faltantes o elements eliminados accidentalmente.\n` +
 `25. ORDEN DE PRIORIDAD: En caso de conflicto entre optimización, refactorización, limpieza de código y preservación del comportamiento existente, debe prevalecer siempre la preservación del comportamiento actual del sistema.\n`;
 
-// NUEVO: Protocolo de inicialización para la Parte 1
+// Protocolo de inicialización para la Parte 1
 const PROTOCOLO_INICIO = 
 `=========================================\n` +
 `PROTOCOLO DE TRANSMISIÓN DE CONTEXTO\n` +
@@ -211,8 +210,7 @@ async function construirSuperPrompt() {
     const btnCopiarTodo = document.getElementById('btnCopiarTodo');
     if (!urlInput) { alert("Por favor, introduce una URL de GitHub principal."); return; }
     
-    // MODIFICADO: Validación estricta del tamaño de la instrucción para evitar desbordamientos silenciosos
-    const overheadMinimo = 1500; // Cabeceras, protocolos y margen de seguridad
+    const overheadMinimo = 1500; 
     if (instrucciones && (instrucciones.length + overheadMinimo) > MAX_CARACTERES_POR_PROMPT) {
         alert(`❌ Tu instrucción tiene ${instrucciones.length} caracteres, lo cual excede el límite de contexto de ${MAX_CARACTERES_POR_PROMPT} caracteres seleccionado. La IA la cortará de forma segura. Por favor, reduce tu instrucción o aumenta el límite superior (Contexto).`);
         if (btn) { btn.disabled = false; btn.innerText = "⚡ REINTENTAR"; }
@@ -260,17 +258,13 @@ async function construirSuperPrompt() {
         }
         status.innerText = "⏳ Armando secuencia de prompts...";
         
-        // NUEVO: Cálculo de Overhead para evitar cortes y desbordamientos
         const longitudInstrucciones = instrucciones ? instrucciones.length : 0;
         const longitudReglas = REGLAS_EMPAQUETADO_SISTEMA.length;
         const longitudProtocolo = PROTOCOLO_INICIO.length;
-        // MODIFICADO: Margen de seguridad ampliado para absorber de forma fiable todas las cabeceras variables y textos de control
         const MARGEN_SEGURIDAD = 1500; 
         
-        // El espacio máximo real disponible para código por paquete
         const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD));
 
-        // NUEVO: Procesamiento de bloques grandes - Si un archivo individual supera el límite efectivo, se fragmenta por líneas para evitar cortes silenciosos
         let bloquesProcesados = [];
         for (const bloque of todosLosBloquesArchivos) {
             if (bloque.length <= limiteEfectivoCodigo) {
@@ -292,40 +286,43 @@ async function construirSuperPrompt() {
 
         let listaPromptsAGenerar = [];
         let acumulador = "";
-        // MODIFICADO: Se itera sobre los bloques ya procesados y fragmentados de manera segura
+        
+        // MODIFICADO: Algoritmo corregido para empaquetar bloques de forma compacta y codiciosa
         for (const bloque of bloquesProcesados) {
+            if (bloque.trim() === "") continue; 
             if ((acumulador + bloque).length > limiteEfectivoCodigo) {
-                listaPromptsAGenerar.push(acumulador);
+                if (acumulador !== "") {
+                    listaPromptsAGenerar.push(acumulador);
+                }
                 acumulador = bloque;
             } else {
                 acumulador += bloque;
             }
         }
-        if (acumulador !== "") listaPromptsAGenerar.push(acumulador);
+        if (acumulador !== "") {
+            listaPromptsAGenerar.push(acumulador);
+        }
         
         promptsFinalesListos = [];
         const totalPartes = listaPromptsAGenerar.length;
         
-        // MODIFICADO: Bloque optimizado de inyección y estructuración de la secuencia de partes
         listaPromptsAGenerar.forEach((contenido, index) => {
             const num = index + 1;
             const esPrimera = num === 1;
             const esUltima = num === totalPartes;
             let texto = "";
 
-            // Lógica de cabecera separada para evitar conflictos cuando esPrimera && esUltima
             if (esPrimera && esUltima) {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
             } else if (esPrimera) {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
-                texto += PROTOCOLO_INICIO; // Aviso de protocolo en la primera parte
+                texto += PROTOCOLO_INICIO; 
             } else if (esUltima) {
                 texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
             } else {
                 texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
             }
 
-            // Inyección del OBJETIVO tanto en la parte 1 (con freno) como en la final (con orden de ejecución)
             if (instrucciones) {
                 if (esPrimera && !esUltima) {
                     texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
@@ -334,14 +331,12 @@ async function construirSuperPrompt() {
                 }
             }
 
-            // Las reglas de empaquetado siempre van en la última parte
             if (esUltima) {
                 texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
             }
 
             texto += `ESTRUCTURA DEL CÓDIGO (PARTE ${num}):\n${contenido}\n`;
             
-            // Inyección de un muro de contención estricto e inequívoco para partes intermedias, o disparador de ejecución para la final
             if (esUltima) {
                 texto += `\nFIN DEL CONTEXTO. Procesa todo el material provisto y ejecuta el OBJETIVO cumpliendo estrictamente con las NORMAS DE SALIDA OBLIGATORIAS.`;
             } else {
@@ -394,7 +389,7 @@ function copiarParte(index) {
             btn.innerText = "✅ ¡Copiado!";
             setTimeout(() => btn.innerText = `📋 Copiar Parte ${index + 1}`, 2500);
         }
-    }).catch(err => { // NUEVO: Añadido control de errores silencioso del portapapeles
+    }).catch(err => { 
         console.error('Error al copiar al portapapeles:', err);
         alert("Error al copiar la parte. Por favor, copia manualmente.");
     });
@@ -408,7 +403,7 @@ function copiarTodoElPrompt() {
             btnAll.innerText = "✅ ¡TODO COPIADO!";
             setTimeout(() => btnAll.innerText = "📄 COPIAR TODO EN UNO", 3000);
         }
-    }).catch(err => { // NUEVO: Añadido control de errores silencioso del portapapeles
+    }).catch(err => { 
         console.error('Error al copiar al portapapeles:', err);
         alert("Error al copiar todo el prompt. Por favor, copia manualmente.");
     });
