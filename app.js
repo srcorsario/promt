@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.1 - Añadida plantilla 'fusionar' para adopción de código entre repositorios
-const VER_APP = "2.7.1"; 
+// MODIFICADO: Versión actualizada a v2.7.2 - Corregido desbordamiento silencioso al trocear archivos grandes y validación estricta de instrucciones
+const VER_APP = "2.7.2"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -211,9 +211,12 @@ async function construirSuperPrompt() {
     const btnCopiarTodo = document.getElementById('btnCopiarTodo');
     if (!urlInput) { alert("Por favor, introduce una URL de GitHub principal."); return; }
     
-    // NUEVO: Alerta visual si el prompt del usuario es excesivamente largo para el límite
-    if (instrucciones && instrucciones.length > (MAX_CARACTERES_POR_PROMPT * 0.7)) {
-        alert(`⚠️ Tu instrucción tiene ${instrucciones.length} caracteres, lo cual es muy grande para el límite de ${MAX_CARACTERES_POR_PROMPT} caracteres seleccionado. Esto podría provocar recortes o errores en la IA. Considera aumentar el límite superior o resumir tu orden.`);
+    // MODIFICADO: Validación estricta del tamaño de la instrucción para evitar desbordamientos silenciosos
+    const overheadMinimo = 1500; // Cabeceras, protocolos y margen de seguridad
+    if (instrucciones && (instrucciones.length + overheadMinimo) > MAX_CARACTERES_POR_PROMPT) {
+        alert(`❌ Tu instrucción tiene ${instrucciones.length} caracteres, lo cual excede el límite de contexto de ${MAX_CARACTERES_POR_PROMPT} caracteres seleccionado. La IA la cortará de forma segura. Por favor, reduce tu instrucción o aumenta el límite superior (Contexto).`);
+        if (btn) { btn.disabled = false; btn.innerText = "⚡ REINTENTAR"; }
+        return;
     }
 
     localStorage.setItem('last_github_repo', urlInput);
@@ -261,18 +264,37 @@ async function construirSuperPrompt() {
         const longitudInstrucciones = instrucciones ? instrucciones.length : 0;
         const longitudReglas = REGLAS_EMPAQUETADO_SISTEMA.length;
         const longitudProtocolo = PROTOCOLO_INICIO.length;
-        const MARGEN_SEGURIDAD = 500; // Espacio para cabeceras y textos de control
+        // MODIFICADO: Margen de seguridad ampliado para absorber de forma fiable todas las cabeceras variables y textos de control
+        const MARGEN_SEGURIDAD = 1500; 
         
         // El espacio máximo real disponible para código por paquete
         const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD));
 
+        // NUEVO: Procesamiento de bloques grandes - Si un archivo individual supera el límite efectivo, se fragmenta por líneas para evitar cortes silenciosos
+        let bloquesProcesados = [];
+        for (const bloque of todosLosBloquesArchivos) {
+            if (bloque.length <= limiteEfectivoCodigo) {
+                bloquesProcesados.push(bloque);
+            } else {
+                const lineas = bloque.split('\n');
+                let subBloque = "";
+                for (const linea of lineas) {
+                    if ((subBloque + linea + '\n').length > limiteEfectivoCodigo) {
+                        if (subBloque !== "") bloquesProcesados.push(subBloque);
+                        subBloque = linea + '\n';
+                    } else {
+                        subBloque += linea + '\n';
+                    }
+                }
+                if (subBloque !== "") bloquesProcesados.push(subBloque);
+            }
+        }
+
         let listaPromptsAGenerar = [];
         let acumulador = "";
-        for (const bloque of todosLosBloquesArchivos) {
-            if (bloque.length > limiteEfectivoCodigo) {
-                if (acumulador !== "") { listaPromptsAGenerar.push(acumulador); acumulador = ""; }
-                listaPromptsAGenerar.push(bloque);
-            } else if ((acumulador + bloque).length > limiteEfectivoCodigo) {
+        // MODIFICADO: Se itera sobre los bloques ya procesados y fragmentados de manera segura
+        for (const bloque of bloquesProcesados) {
+            if ((acumulador + bloque).length > limiteEfectivoCodigo) {
                 listaPromptsAGenerar.push(acumulador);
                 acumulador = bloque;
             } else {
@@ -280,6 +302,7 @@ async function construirSuperPrompt() {
             }
         }
         if (acumulador !== "") listaPromptsAGenerar.push(acumulador);
+        
         promptsFinalesListos = [];
         const totalPartes = listaPromptsAGenerar.length;
         
@@ -295,7 +318,7 @@ async function construirSuperPrompt() {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
             } else if (esPrimera) {
                 texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
-                texto += PROTOCOLO_INICIO; // NUEVO: Aviso de protocolo en la primera parte
+                texto += PROTOCOLO_INICIO; // Aviso de protocolo en la primera parte
             } else if (esUltima) {
                 texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
             } else {
@@ -371,6 +394,9 @@ function copiarParte(index) {
             btn.innerText = "✅ ¡Copiado!";
             setTimeout(() => btn.innerText = `📋 Copiar Parte ${index + 1}`, 2500);
         }
+    }).catch(err => { // NUEVO: Añadido control de errores silencioso del portapapeles
+        console.error('Error al copiar al portapapeles:', err);
+        alert("Error al copiar la parte. Por favor, copia manualmente.");
     });
 }
 
@@ -382,5 +408,8 @@ function copiarTodoElPrompt() {
             btnAll.innerText = "✅ ¡TODO COPIADO!";
             setTimeout(() => btnAll.innerText = "📄 COPIAR TODO EN UNO", 3000);
         }
+    }).catch(err => { // NUEVO: Añadido control de errores silencioso del portapapeles
+        console.error('Error al copiar al portapapeles:', err);
+        alert("Error al copiar todo el prompt. Por favor, copia manualmente.");
     });
 }
