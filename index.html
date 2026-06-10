@@ -193,7 +193,8 @@
         <h1>🚀 GitHub Prompt Helper</h1>
         <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
         <div class="version-container">
-            <span class="version-badge">Index: v2.3.0</span>
+            <!-- MODIFICADO: Versión subida a v2.4.0 reflejando el cambio de paradigma caracteres/tokens -->
+            <span class="version-badge">Index: v2.4.0</span>
             <span class="version-badge" id="versionApp">App: Cargando...</span>
         </div>
     </div>
@@ -201,13 +202,14 @@
     <div class="box">
         <div class="top-tools-bar">
             <div class="tool-item">
-                <label for="limitSelect">🧠 Contexto:</label>
-                <!-- MODIFICADO: Valores ajustados a Caracteres reales basados en tokens (~3.5 chars/token) para evitar divisiones absurdas -->
+                <!-- MODIFICADO: Cambio a Caracteres (chars) reales para evitar truncado silencioso en interfaces web de IAs -->
+                <label for="limitSelect">📏 Límite por mensaje:</label>
                 <select id="limitSelect">
-                    <option value="350000">Gemini 1.5 (100k tokens)</option>
-                    <option value="210000">Claude 3.5 (60k tokens)</option>
-                    <option value="105000">GPT-4o (30k tokens)</option>
-                    <option value="52500" selected>Legacy (15k tokens)</option>
+                    <option value="5000">5k chars (Seguro)</option>
+                    <option value="10000">10k chars (Estándar)</option>
+                    <option value="15000" selected>15k chars (Recomendado)</option>
+                    <option value="25000">25k chars (Arriesgado)</option>
+                    <option value="50000">50k chars (Solo API)</option>
                 </select>
             </div>
             <div class="tool-item">
@@ -219,7 +221,6 @@
                     <option value="refactor">⚡ Optimizar y refactorizar rendimiento</option>
                     <option value="documentar">✍️ Generar documentación y JSDoc</option>
                     <option value="test">🧪 Crear plan de pruebas unitarias</option>
-                    <!-- Orden para fusionar o adoptar código de un repositorio secundario -->
                     <option value="fusionar">🔄 Adoptar funciones del Secundario al Principal</option>
                 </select>
             </div>
