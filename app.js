@@ -1,6 +1,6 @@
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.3 - Corregido algoritmo de empaquetado para evitar paquetes ultra pequeños
-const VER_APP = "2.7.3"; 
+// MODIFICADO: Versión actualizada a v2.7.4 - Implementación de corte de archivos con marcas de unión para la IA
+const VER_APP = "2.7.4"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -46,7 +46,8 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `22. INCERTIDUMBRE OBLIGATORIA: Cuando una decisión técnica no pueda deducirse con certeza a partir del contexto proporcionado, debes indicarlo explícitamente mediante una sección "SUPOSICIONES NECESARIAS" antes del código generado.\n` +
 `23. CONSERVACIÓN FUNCIONAL: No elimines funciones, bloques, estilos, estructuras HTML o configuraciones existentes salvo que el objetivo solicitado requiera explícitamente su eliminación. Toda eliminación debe justificarse de forma explícita.\n` +
 `24. VALIDACIÓN PREVIA DE RESPUESTA: Antes de entregar el resultado final, verifica que el código generado no contenga referencias a variables inexistentes, funciones inexistentes, imports faltantes o elements eliminados accidentalmente.\n` +
-`25. ORDEN DE PRIORIDAD: En caso de conflicto entre optimización, refactorización, limpieza de código y preservación del comportamiento existente, debe prevalecer siempre la preservación del comportamiento actual del sistema.\n`;
+`25. ORDEN DE PRIORIDAD: En caso de conflicto entre optimización, refactorización, limpieza de código y preservación del comportamiento existente, debe prevalecer siempre la preservación del comportamiento actual del sistema.\n` +
+`26. UNIÓN DE ARCHIVOS DIVIDIDOS: Si un archivo de código ha sido dividido en múltiples partes debido a limitaciones de tamaño, lo verás marcado explícitamente con "[🔒 ARCHIVO DIVIDIDO]". Debes interpretar y unir mentalmente todas las partes del archivo afectado como un todo continuo antes de analizarlo o modificarlo. No trates las partes divididas como archivos independientes.\n`;
 
 // Protocolo de inicialización para la Parte 1
 const PROTOCOLO_INICIO = 
@@ -256,7 +257,7 @@ async function construirSuperPrompt() {
                 htmlPreviewArchivos += resultadoSecundario.nombresArchivos.map(name => `<span class="file-tag" style="border-left: 3px solid var(--accent);">📄 ${name}</span>`).join('');
             }
         }
-        status.innerText = "⏳ Armando secuencia de prompts...";
+        status.innerText = "⏳ Armando secuencia de prompts y verificando integridad de archivos...";
         
         const longitudInstrucciones = instrucciones ? instrucciones.length : 0;
         const longitudReglas = REGLAS_EMPAQUETADO_SISTEMA.length;
@@ -265,22 +266,58 @@ async function construirSuperPrompt() {
         
         const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD));
 
+        // MODIFICADO: Lógica de corte de archivos con marcas explícitas y repetición de cabeceras para la IA
         let bloquesProcesados = [];
         for (const bloque of todosLosBloquesArchivos) {
             if (bloque.length <= limiteEfectivoCodigo) {
                 bloquesProcesados.push(bloque);
             } else {
                 const lineas = bloque.split('\n');
+                
+                // Extraer cabecera para replicarla en cada fragmento
+                let headerLines = [];
+                let separatorCount = 0;
+                for (let i = 0; i < lineas.length; i++) {
+                    headerLines.push(lineas[i]);
+                    if (lineas[i].includes('=========================================')) {
+                        separatorCount++;
+                        if (separatorCount === 2) break;
+                    }
+                }
+                const headerStr = headerLines.join('\n') + '\n';
+                const codeLines = lineas.slice(headerLines.length);
+                
+                // Estimación de partes para las marcas
+                const totalPartes = Math.max(2, Math.ceil(codeLines.join('\n').length / (limiteEfectivoCodigo - headerStr.length - 300)));
+                
                 let subBloque = "";
-                for (const linea of lineas) {
-                    if ((subBloque + linea + '\n').length > limiteEfectivoCodigo) {
-                        if (subBloque !== "") bloquesProcesados.push(subBloque);
+                let parteNum = 1;
+                
+                for (const linea of codeLines) {
+                    if ((headerStr.length + subBloque.length + linea.length + 300) > limiteEfectivoCodigo) {
+                        if (subBloque.trim() !== "") {
+                            const markerStart = parteNum === 1 
+                                ? `// [🔒 ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - POR FAVOR UNIR MENTALMENTE]\n` 
+                                : `// [🔒 CONTINUACIÓN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - UNIR CON PARTE ANTERIOR]\n`;
+                            const markerEnd = parteNum < totalPartes 
+                                ? `\n// [🔒 FIN DE PARTE ${parteNum}. CONTINÚA EN LA SIGUIENTE PARTE]` 
+                                : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]`;
+                            
+                            const modifiedHeader = headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
+                            bloquesProcesados.push(modifiedHeader + markerStart + subBloque + markerEnd);
+                            parteNum++;
+                        }
                         subBloque = linea + '\n';
                     } else {
                         subBloque += linea + '\n';
                     }
                 }
-                if (subBloque !== "") bloquesProcesados.push(subBloque);
+                if (subBloque.trim() !== "") {
+                    const markerStart = parteNum === 1 ? "" : `// [🔒 CONTINUACIÓN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - UNIR CON PARTE ANTERIOR]\n`;
+                    const markerEnd = parteNum === 1 ? "" : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]`;
+                    const modifiedHeader = parteNum === 1 ? headerStr : headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
+                    bloquesProcesados.push(modifiedHeader + markerStart + subBloque + markerEnd);
+                }
             }
         }
 
