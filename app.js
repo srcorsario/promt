@@ -1,7 +1,8 @@
+// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 3 - POR FAVOR UNIR MENTALMENTE]
 // [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 2 - POR FAVOR UNIR MENTALMENTE]
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.6 - Implementación de marca de fin de parte y validación de integridad
-const VER_APP = "2.7.6"; 
+// MODIFICADO: Versión actualizada a v2.7.7 - Aumento del límite por defecto para reducir particiones
+const VER_APP = "2.7.7"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
@@ -54,7 +55,6 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `26. UNIÓN DE ARCHIVOS DIVIDIDOS: Si un archivo de código ha sido dividido en múltiples partes debido a limitaciones de tamaño, lo verás marcado explícitamente con "[🔒 ARCHIVO DIVIDIDO]". Debes interpretar y unir mentalmente todas las partes del archivo afectado como un todo continuo antes de analizarlo o modificarlo. No trates las partes divididas como archivos independientes.\n`;
 
 // Protocolo de inicialización para la Parte 1
-// MODIFICADO: Añadida instrucción de validación de marca de fin de parte
 const PROTOCOLO_INICIO = 
 `=========================================\n` +
 `PROTOCOLO DE TRANSMISIÓN DE CONTEXTO\n` +
@@ -206,7 +206,8 @@ async function construirSuperPrompt() {
     const urlSecundariaInput = document.getElementById('repoUrlSecundario')?.value.trim();
     const instrucciones = document.getElementById('instrucciones')?.value.trim();
     const limitSelectEl = document.getElementById('limitSelect');
-    const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 15000;
+    // MODIFICADO: Fallback aumentado a 50000 caracteres para disminuir la cantidad de paquetes generados
+    const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 50000;
     const btn = document.getElementById('btnGenerar');
     const btnReset = document.getElementById('btnReset');
     const status = document.getElementById('statusCarga');
@@ -270,7 +271,6 @@ async function construirSuperPrompt() {
         const longitudProtocolo = PROTOCOLO_INICIO.length;
         const MARGEN_SEGURIDAD = 1500; 
         
-        // MODIFICADO: Se añade MARCA_FIN_PARTE.length al cálculo de límite efectivo
         const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD + MARCA_FIN_PARTE.length));
 
         let bloquesProcesados = [];
@@ -403,7 +403,6 @@ async function construirSuperPrompt() {
                 texto += `"Entendido. Parte ${num} recibida y almacenada en contexto. Quedo a la espera de la Parte ${num + 1}."`;
             }
             
-            // NUEVO: Agregar la marca de fin de parte a todos los fragmentos generados
             texto += MARCA_FIN_PARTE;
 
             promptsFinalesListos.push(texto);
