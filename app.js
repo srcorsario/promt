@@ -1,10 +1,13 @@
-// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 6 - POR FAVOR UNIR MENTALMENTE]
+// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 2 - POR FAVOR UNIR MENTALMENTE]
 // Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.5 - Corrección de corte de archivos grandes, cálculo de límites y advertencias de truncado
-const VER_APP = "2.7.5"; 
+// MODIFICADO: Versión actualizada a v2.7.6 - Implementación de marca de fin de parte y validación de integridad
+const VER_APP = "2.7.6"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
+
+// NUEVO: Marca de confirmación de parte completa para evitar truncados silenciosos
+const MARCA_FIN_PARTE = "\n\n[✅ FIN DE LA PARTE PROMPT ENVIADA - Este fragmento está completo y no ha sido truncado]";
 
 // Diccionario de órdenes e instrucciones prefijadas
 const PLANTILLAS_ORDENES = {
@@ -51,6 +54,7 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `26. UNIÓN DE ARCHIVOS DIVIDIDOS: Si un archivo de código ha sido dividido en múltiples partes debido a limitaciones de tamaño, lo verás marcado explícitamente con "[🔒 ARCHIVO DIVIDIDO]". Debes interpretar y unir mentalmente todas las partes del archivo afectado como un todo continuo antes de analizarlo o modificarlo. No trates las partes divididas como archivos independientes.\n`;
 
 // Protocolo de inicialización para la Parte 1
+// MODIFICADO: Añadida instrucción de validación de marca de fin de parte
 const PROTOCOLO_INICIO = 
 `=========================================\n` +
 `PROTOCOLO DE TRANSMISIÓN DE CONTEXTO\n` +
@@ -58,7 +62,8 @@ const PROTOCOLO_INICIO =
 `Estás a punto de recibir el código fuente de un proyecto de software dividido en múltiples partes.\n` +
 `- Tu ÚNICA función en las partes intermedias es almacenar el contexto en tu memoria temporal.\n` +
 `- Está PROHIBIDO procesar, analizar o ejecutar el OBJETIVO hasta que recibas la parte FINAL.\n` +
-`- En la parte FINAL recibirás la orden de ejecución junto con las NORMAS DE SALIDA OBLIGATORIAS.\n\n`;
+`- En la parte FINAL recibirás la orden de ejecución junto con las NORMAS DE SALIDA OBLIGATORIAS.\n` +
+`- VALIDACIÓN DE INTEGRIDAD: Cada parte que recibas terminará EXACTAMENTE con la marca "[✅ FIN DE LA PARTE PROMPT ENVIADA - Este fragmento está completo y no ha sido truncado]". Si al recibir una nueva parte, la parte anterior NO terminó con esta marca, significa que hubo un truncamiento por límite de caracteres. En ese caso, DEBES avisar al usuario inmediatamente indicando qué parte se truncó y DETENER el procesamiento del prompt hasta que el usuario envíe la parte faltante o corregida.\n\n`;
 
 document.addEventListener('DOMContentLoaded', () => {
     const versionBadgeApp = document.getElementById('versionApp');
@@ -265,9 +270,9 @@ async function construirSuperPrompt() {
         const longitudProtocolo = PROTOCOLO_INICIO.length;
         const MARGEN_SEGURIDAD = 1500; 
         
-        const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD));
+        // MODIFICADO: Se añade MARCA_FIN_PARTE.length al cálculo de límite efectivo
+        const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD + MARCA_FIN_PARTE.length));
 
-        // MODIFICADO: Lógica de corte de archivos con marcas explícitas, manejo de líneas largas y cálculo exacto de partes
         let bloquesProcesados = [];
         for (const bloque of todosLosBloquesArchivos) {
             if (bloque.length <= limiteEfectivoCodigo) {
@@ -275,7 +280,6 @@ async function construirSuperPrompt() {
             } else {
                 const lineas = bloque.split('\n');
                 
-                // Extraer cabecera para replicarla en cada fragmento
                 let headerLines = [];
                 let separatorCount = 0;
                 for (let i = 0; i < lineas.length; i++) {
@@ -288,12 +292,10 @@ async function construirSuperPrompt() {
                 const headerStr = headerLines.join('\n') + '\n';
                 const codeLines = lineas.slice(headerLines.length);
                 
-                // NUEVO: Generar fragmentos de código puro para calcular el total exacto de partes
                 let fragmentosCodigo = [];
                 let subBloque = "";
                 
                 for (const linea of codeLines) {
-                    // NUEVO: Si una línea individual excede el límite, la aislamos en su propio fragmento para no arrastrar líneas siguientes
                     if ((headerStr.length + linea.length + 300) > limiteEfectivoCodigo) {
                         if (subBloque.trim() !== "") {
                             fragmentosCodigo.push(subBloque);
@@ -315,7 +317,6 @@ async function construirSuperPrompt() {
                     fragmentosCodigo.push(subBloque);
                 }
 
-                // NUEVO: Ahora que sabemos el total exacto, inyectar cabeceras y marcadores
                 const totalPartes = fragmentosCodigo.length;
                 for (let i = 0; i < totalPartes; i++) {
                     const parteNum = i + 1;
@@ -339,8 +340,7 @@ async function construirSuperPrompt() {
         let listaPromptsAGenerar = [];
         let acumulador = "";
         
-        // MODIFICADO: Algoritmo de empaquetado mejorado calculando el overhead real máximo de forma conservadora
-        const estimacionOverheadMaximo = longitudInstrucciones + longitudReglas + longitudProtocolo + 500; 
+        const estimacionOverheadMaximo = longitudInstrucciones + longitudReglas + longitudProtocolo + 500 + MARCA_FIN_PARTE.length; 
         const limiteContenido = MAX_CARACTERES_POR_PROMPT - estimacionOverheadMaximo;
 
         for (const bloque of bloquesProcesados) {
@@ -402,6 +402,10 @@ async function construirSuperPrompt() {
                 texto += `Para confirmar que has entendido que debes esperar a las partes restantes, responde EXCLUSIVAMENTE con la siguiente línea de texto, sin añadir saludos, disculpas ni comentarios adicionales:\n\n`;
                 texto += `"Entendido. Parte ${num} recibida y almacenada en contexto. Quedo a la espera de la Parte ${num + 1}."`;
             }
+            
+            // NUEVO: Agregar la marca de fin de parte a todos los fragmentos generados
+            texto += MARCA_FIN_PARTE;
+
             promptsFinalesListos.push(texto);
         });
         
@@ -420,7 +424,6 @@ async function construirSuperPrompt() {
                 const minTokens = Math.round(charCount / 4);
                 const maxTokens = Math.round(charCount / 3);
 
-                // NUEVO: Advertencia si el prompt final supera el límite seleccionado por el usuario
                 let advertencia = "";
                 if (charCount > MAX_CARACTERES_POR_PROMPT) {
                     advertencia = `<span style="color:var(--danger); font-weight:700; margin-left:10px;">⚠️ EXCEDE LÍMITE (${charCount.toLocaleString()} / ${MAX_CARACTERES_POR_PROMPT.toLocaleString()} chars) - LA IA LO TRUNCARÁ</span>`;
