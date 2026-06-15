@@ -1,11 +1,16 @@
-// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 3 - POR FAVOR UNIR MENTALMENTE]
-// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 2 - POR FAVOR UNIR MENTALMENTE]
+// =========================================
+// REPOSITORIO: promt (PRINCIPAL)
+// ARCHIVO: app.js
+// =========================================
+// [🔒 ARCHIVO DIVIDIDO - TOTALIDAD COMPLETA SIN CORTES]
 // Variable que controla la versión del script lógico
 // MODIFICADO: Versión actualizada a v2.7.7 - Aumento del límite por defecto para reducir particiones
 const VER_APP = "2.7.7"; 
 
 // Variables globales para la cola de copiado
 let promptsFinalesListos = [];
+// NUEVO: Variable para rastrear el último índice de prompt copiado correctamente
+let ultimoIndiceCopiado = -1;
 
 // NUEVO: Marca de confirmación de parte completa para evitar truncados silenciosos
 const MARCA_FIN_PARTE = "\n\n[✅ FIN DE LA PARTE PROMPT ENVIADA - Este fragmento está completo y no ha sido truncado]";
@@ -14,7 +19,7 @@ const MARCA_FIN_PARTE = "\n\n[✅ FIN DE LA PARTE PROMPT ENVIADA - Este fragment
 const PLANTILLAS_ORDENES = {
     analizar: "Analiza detalladamente la arquitectura de este proyecto. Explica cómo se comunican los componentes, los flujos de datos principales y enumera las dependencias críticas detectadas.",
     bugs: "Revisa exhaustivamente todo el código provisto en busca de errores de lógica, fallas de seguridad potenciales, fugas de memoria o malas prácticas. Muestra los puntos críticos y propón sus correcciones exactas.",
-    refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una versión optimizada del código que mejore el rendimiento y la legibilidad.",
+    refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una version optimizada del código que mejore el rendimiento y la legibilidad.",
     documentar: "Generar la documentación técnica correspondiente para las funciones y módulos clave de este repositorio. Añade comentarios claros y estructuras de tipo JSDoc/comentarios descriptivos donde falten.",
     test: "Examina los flujos lógicos y genera una estrategia integral de pruebas unitarias. Detalla qué casos de prueba y escenarios límite (edge cases) se deben validar de forma prioritaria en base a los archivos adjuntos.",
     fusionar: "Actúa como un arquitecto de software experto en integración de sistemas. Tu objetivo es auditar el Repositorio Principal y el Repositorio de Referencia Secundaria. 1) Identifica funciones, utilidades, componentes o patrones de diseño presentes en el repositorio SECUNDARIO que puedan mejorar, optimizar o añadir funcionalidades faltantes al repositorio PRINCIPAL. 2) Para cada mejora identificada, proporciona el código exacto listo para implementar en el PRINCIPAL, adaptando la lógica para que sea 100% compatible con su arquitectura actual, sin romper flujos existentes y manejando el DOM de forma defensiva. 3) Si no encuentras nada útil que adoptar, indícalo expresamente."
@@ -34,7 +39,7 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `5. PRESERVACIÓN DE IDENTIFICADORES: Está estrictamente prohibido renombrar funciones, variables, identificadores HTML (id), clases CSS o claves de almacenamiento (localStorage) existentes. Mantén intacta la nomenclatura original.\n` +
 `6. ENTORNO TECNOLÓGICO: Resuelve el objetivo utilizando exclusivamente las tecnologías nativas provistas (Vanilla JS, CSS nativo, etc.). No inventes dependencias ni asumas la existencia de librerías externas que no veas explícitamente en el contexto.\n` +
 `7. MODULARIDAD SEGURA: Cualquier lógica nueva debe aislarse correctamente y no debe interferir con los listeners de ciclo de vida (como DOMContentLoaded) ni con las variables globales del sistema.\n` +
-`8. SALIDA DIRECTA Y COMPACTA: Entrega los resultados estructurados en bloques de código Markdown limpios. Evita textos introductorios densos, rodeos teóricos o saludos; prioriza la legibilidad y la velocidad de copiado.\n` +
+`8. SALIDA DIRECTA Y COMPACTA: Entrega los resultados structured en bloques de código Markdown limpios. Evita textos introductorios densos, rodeos teóricos o saludos; prioriza la legibilidad y la velocidad de copiado.\n` +
 `9. MANEJO DEFENSIVO DEL DOM: Antes de interactuar con cualquier elemento de la interfaz (capturar valor, asignar texto o colgar listeners), valida obligatoriamente su existencia mediante condicionales (if (elemento)) para evitar excepciones que detengan la ejecución del script.\n` +
 `10. CONTROL DE LISTENERS: Diseña los manejadores de eventos de forma que no puedan registrarse duplicados ni generar fugas de memoria al reejecutar funciones. Evita registrar listeners estáticos de forma masiva dentro de funciones asíncronas o bucles de renderizado.\n` +
 `11. INTEGRIDAD DEL ESTADO: Los cambios lógicos no deben resetear, limpiar o alterar involuntariamente los inputs, textareas, variables de estado activas o datos antiguos alojados en LocalStorage, manteniendo la compatibilidad hacia atrás.\n` +
@@ -55,13 +60,14 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `26. UNIÓN DE ARCHIVOS DIVIDIDOS: Si un archivo de código ha sido dividido en múltiples partes debido a limitaciones de tamaño, lo verás marcado explícitamente con "[🔒 ARCHIVO DIVIDIDO]". Debes interpretar y unir mentalmente todas las partes del archivo afectado como un todo continuo antes de analizarlo o modificarlo. No trates las partes divididas como archivos independientes.\n`;
 
 // Protocolo de inicialización para la Parte 1
+// MODIFICADO: Instrucciones robustecidas para obligar silencio total de la IA y retención exclusiva en memoria
 const PROTOCOLO_INICIO = 
 `=========================================\n` +
 `PROTOCOLO DE TRANSMISIÓN DE CONTEXTO\n` +
 `=========================================\n` +
 `Estás a punto de recibir el código fuente de un proyecto de software dividido en múltiples partes.\n` +
-`- Tu ÚNICA función en las partes intermedias es almacenar el contexto en tu memoria temporal.\n` +
-`- Está PROHIBIDO procesar, analizar o ejecutar el OBJETIVO hasta que recibas la parte FINAL.\n` +
+`- Tu ÚNICA función en las partes intermedias es almacenar el contexto en tu memoria temporal de forma estrictamente silenciosa.\n` +
+`- Está ABSOLUTAMENTE PROHIBIDO responder con análisis parciales, comentarios sobre código ausente o suposiciones preventivas del tipo "esta parte del archivo no la tengo, supondremos que...". No generes respuestas descriptivas técnicas hasta la orden final.\n` +
 `- En la parte FINAL recibirás la orden de ejecución junto con las NORMAS DE SALIDA OBLIGATORIAS.\n` +
 `- VALIDACIÓN DE INTEGRIDAD: Cada parte que recibas terminará EXACTAMENTE con la marca "[✅ FIN DE LA PARTE PROMPT ENVIADA - Este fragmento está completo y no ha sido truncado]". Si al recibir una nueva parte, la parte anterior NO terminó con esta marca, significa que hubo un truncamiento por límite de caracteres. En ese caso, DEBES avisar al usuario inmediatamente indicando qué parte se truncó y DETENER el procesamiento del prompt hasta que el usuario envíe la parte faltante o corregida.\n\n`;
 
@@ -157,6 +163,10 @@ function limpiarInterfaz() {
     }
     const btnReset = document.getElementById('btnReset');
     if (btnReset) btnReset.style.display = "none";
+    
+    // NUEVO: Reiniciar el tracking del orden de copiado al limpiar la interfaz
+    ultimoIndiceCopiado = -1;
+    
     actualizarDesplegableHistorial();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -368,9 +378,11 @@ async function construirSuperPrompt() {
             let texto = "";
 
             if (esPrimera && esUltima) {
-                texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
+                // MODIFICADO: Añadido comando explícito de reinicio total de memoria para consultas únicas
+                texto += `[AVISO DE NUEVO PROYECTO: RESETEA COMPLETA MENTE TU MEMORIA ANTERIOR] Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
             } else if (esPrimera) {
-                texto += `Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
+                // MODIFICADO: Añadido comando explícito de reinicio total de memoria al arrancar un lote multipartes
+                texto += `[AVISO DE NUEVO PROYECTO: RESETEA COMPLETA MENTE TU MEMORIA ANTERIOR] Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
                 texto += PROTOCOLO_INICIO; 
             } else if (esUltima) {
                 texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
@@ -408,6 +420,9 @@ async function construirSuperPrompt() {
             promptsFinalesListos.push(texto);
         });
         
+        // NUEVO: Reiniciar la secuencia de tracking interno cada vez que se genera un set nuevo de prompts
+        ultimoIndiceCopiado = -1;
+
         status.style.color = "#10b981";
         status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
         if (btn) { btn.innerText = "✅ COLA LISTA"; btn.disabled = true; btn.style.display = "none"; }
@@ -443,9 +458,18 @@ async function construirSuperPrompt() {
 }
 
 function copiarParte(index) {
+    // NUEVO: Verificación quirúrgica de orden secuencial estricto
+    if (index > ultimoIndiceCopiado + 1) {
+        const confirmarSalto = confirm(`⚠️ ¡Atención! Estás intentando copiar la Parte ${index + 1} pero la última que copiaste fue la Parte ${ultimoIndiceCopiado + 1}.\n\nPara que la IA no sufra lagunas de información, se recomienda seguir el orden correlativo.\n\n¿Quieres saltar a esta parte de todas formas?`);
+        if (!confirmarSalto) return;
+    }
+
     const texto = promptsFinalesListos[index];
     if (!texto) return;
     navigator.clipboard.writeText(texto).then(() => {
+        // NUEVO: Registrar el índice actual como el último copiado si avanza o el usuario fuerza el salto
+        ultimoIndiceCopiado = index;
+
         const btn = document.getElementById(`copyBtn-${index}`);
         if (btn) {
             btn.innerText = "✅ ¡Copiado!";
@@ -470,3 +494,4 @@ function copiarTodoElPrompt() {
         alert("Error al copiar todo el prompt. Por favor, copia manualmente.");
     });
 }
+// [🔒 FIN DE ARCHIVO DIVIDIDO - TOTALIDAD COMPLETA EN UN SÓLO BLOQUE DE SALIDA]
