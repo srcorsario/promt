@@ -193,8 +193,7 @@
         <h1>🚀 GitHub Prompt Helper</h1>
         <p class="subtitle">Empaqueta tu código público directamente para la IA</p>
         <div class="version-container">
-            <!-- MODIFICADO: Versión subida a v2.5.0 por cambio de límites por defecto -->
-            <span class="version-badge">Index: v2.5.0</span>
+            <span class="version-badge">Index: v3.0.0</span>
             <span class="version-badge" id="versionApp">App: Cargando...</span>
         </div>
     </div>
@@ -202,7 +201,6 @@
     <div class="box">
         <div class="top-tools-bar">
             <div class="tool-item">
-                <!-- MODIFICADO: Opciones de límite actualizadas para reflejar las capacidades reales de las IA modernas y reducir paquetes -->
                 <label for="limitSelect">📏 Límite por mensaje:</label>
                 <select id="limitSelect">
                     <option value="15000">15k chars (Conservador)</option>
@@ -249,9 +247,20 @@
     </div>
 
     <div class="box" id="previewBox" style="display:none;">
-        <label>Archivos detectados e incluidos en el contexto:</label>
+        <label>Archivos detectados en el repositorio:</label>
         <div id="listaArchivos"></div>
         
+        <!-- NUEVA SECCIÓN: FILTRO DE EXTENSIONES -->
+        <div id="filterSection" style="margin-top: 20px; display: none;">
+            <label style="color: var(--accent); font-size: 1rem;">⚙️ Filtrar tipos de archivo a incluir</label>
+            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">Imágenes, vídeos y comprimidos están desmarcados por defecto para ahorrar tokens.</p>
+            <div id="extensionFilters" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; max-height: 300px; overflow-y: auto;">
+                <!-- Los checkboxes se inyectarán aquí desde JavaScript -->
+            </div>
+            <button class="copy-all-btn" style="margin-top: 15px;" onclick="aplicarFiltrosYGenerar()">🔄 Aplicar Filtros y Generar Prompts</button>
+        </div>
+        <!-- FIN NUEVA SECCIÓN -->
+
         <div class="queue-container" id="queueContainer" style="display:none;">
             <hr style="border-color: #334155; margin: 20px 0;">
             <h3 style="margin-top:0; color:var(--accent);">📋 Cola de Copiado Rápido</h3>
