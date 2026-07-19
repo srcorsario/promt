@@ -134,6 +134,13 @@ function limpiarInterfaz() {
     btnGenerar.disabled = false; btnGenerar.innerText = "⚡ GENERAR PROMPTS"; btnGenerar.style.display = "block";
     document.getElementById('btnReset').style.display = "none";
     
+    // NUEVO: Restaurar estado del botón de filtros al limpiar
+    const btnAplicarFiltros = document.getElementById('btnAplicarFiltros');
+    if (btnAplicarFiltros) {
+        btnAplicarFiltros.disabled = false;
+        btnAplicarFiltros.innerText = "🔄 Aplicar Filtros y Generar Prompts";
+    }
+
     ultimoIndiceCopiado = -1;
     arbolArchivosPrincipal = []; arbolArchivosSecundario = [];
     actualizarDesplegableHistorial();
@@ -154,6 +161,12 @@ async function obtenerArbolCompleto(datosRepo) {
     if (!response.ok) throw new Error(`No se pudo acceder al árbol del repositorio: ${datosRepo.repo} (¿Rama correcta?)`);
     const data = await response.json();
     if (!data.tree) throw new Error("La API no devolvió un árbol válido.");
+    
+    // NUEVO: Validar si GitHub truncó el árbol por exceder el límite de la API (100k archivos)
+    if (data.truncated) {
+        throw new Error("El repositorio es demasiado grande. La API de GitHub ha truncado el árbol de archivos y no se pueden obtener todos los archivos de forma confiable.");
+    }
+    
     // Filtrar solo archivos (type 'blob'), ignorar carpetas
     return data.tree.filter(item => item.type === 'blob');
 }
@@ -273,12 +286,21 @@ async function aplicarFiltrosYGenerar() {
     const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 50000;
     const instrucciones = document.getElementById('instrucciones')?.value.trim();
 
+    // NUEVO: Prevenir doble clic deshabilitando el botón de filtros
+    const btnAplicarFiltros = document.getElementById('btnAplicarFiltros');
+    if (btnAplicarFiltros) {
+        btnAplicarFiltros.disabled = true;
+        btnAplicarFiltros.innerText = "⏳ PROCESANDO Y DESCARGANDO...";
+    }
+
     // 1. Leer qué extensiones están marcadas
     const checkboxes = document.querySelectorAll('#extensionFilters input[type="checkbox"]:checked');
     const extensionesPermitidas = Array.from(checkboxes).map(cb => cb.value);
     
     if (extensionesPermitidas.length === 0) {
         alert("Debes seleccionar al menos un tipo de archivo para continuar.");
+        // NUEVO: Restaurar botón si se cancela
+        if (btnAplicarFiltros) { btnAplicarFiltros.disabled = false; btnAplicarFiltros.innerText = "🔄 Aplicar Filtros y Generar Prompts"; }
         return;
     }
 
@@ -295,6 +317,8 @@ async function aplicarFiltrosYGenerar() {
 
     if (archivosPrincipalesFiltrados.length === 0 && archivosSecundariosFiltrados.length === 0) {
         alert("Con los filtros seleccionados, no hay archivos válidos para procesar.");
+        // NUEVO: Restaurar botón si no hay archivos
+        if (btnAplicarFiltros) { btnAplicarFiltros.disabled = false; btnAplicarFiltros.innerText = "🔄 Aplicar Filtros y Generar Prompts"; }
         return;
     }
 
@@ -330,10 +354,18 @@ async function aplicarFiltrosYGenerar() {
         
         btnGenerar.style.display = "none";
         btnReset.style.display = "block";
+        
+        // NUEVO: Confirmar estado en el botón de filtros
+        if (btnAplicarFiltros) {
+            btnAplicarFiltros.innerText = "✅ FILTROS APLICADOS";
+            btnAplicarFiltros.disabled = true;
+        }
 
     } catch (error) {
         console.error(error);
         status.style.color = "#ef4444"; status.innerText = `❌ Error al descargar: ${error.message}`;
+        // NUEVO: Restaurar botón si hay error
+        if (btnAplicarFiltros) { btnAplicarFiltros.disabled = false; btnAplicarFiltros.innerText = "🔄 Aplicar Filtros y Generar Prompts"; }
     }
 }
 
@@ -342,16 +374,22 @@ async function descargarContenidos(listaArchivosFiltrada, datosRepo, esPrincipal
     let bloques = [];
     let nombres = [];
     const baseUrl = `https://raw.githubusercontent.com/${datosRepo.user}/${datosRepo.repo}/${datosRepo.branch}/`;
+    // NUEVO: Contador para feedback de errores de descarga
+    let erroresDescarga = 0;
 
     for (const archivo of listaArchivosFiltrada) {
         try {
             // Ignorar archivos muy pesados (>500kb) para no romper el navegador
             if (archivo.size > 500000) {
                 console.warn(`Ignorado por tamaño (>500kb): ${archivo.path}`);
+                erroresDescarga++;
                 continue;
             }
             const resContenido = await fetch(baseUrl + archivo.path);
-            if (!resContenido.ok) continue; 
+            if (!resContenido.ok) { 
+                erroresDescarga++;
+                continue; 
+            }
             const texto = await resContenido.text();
             
             nombres.push(archivo.path); // CAMBIADO: Ahora muestra la ruta completa (ej: src/app.js)
@@ -364,8 +402,17 @@ async function descargarContenidos(listaArchivosFiltrada, datosRepo, esPrincipal
             bloques.push(bloque);
         } catch (errArchivo) {
             console.warn(`Error descargando ${archivo.path}:`, errArchivo);
+            erroresDescarga++;
         }
     }
+
+    // NUEVO: Alertar si la tasa de fallo es muy alta
+    if (erroresDescarga > 0 && erroresDescarga === listaArchivosFiltrada.length) {
+        console.error("CRÍTICO: Ningún archivo pudo ser descargado. ¿El repositorio es privado o la rama no existe?");
+    } else if (erroresDescarga > listaArchivosFiltrada.length * 0.5) {
+        console.warn(`AVISO: Más del 50% de los archivos (${erroresDescarga}/${listaArchivosFiltrada.length}) fallaron al descargar.`);
+    }
+
     return { bloques, nombres };
 }
 
