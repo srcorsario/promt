@@ -3,20 +3,25 @@
 // ARCHIVO: app.js
 // =========================================
 // [🔒 ARCHIVO DIVIDIDO - TOTALIDAD COMPLETA SIN CORTES]
-// Variable que controla la versión del script lógico
-// MODIFICADO: Versión actualizada a v2.7.7 - Aumento del límite por defecto para reducir particiones
-const VER_APP = "2.7.7"; 
+const VER_APP = "3.0.0"; // Actualizado a v3 por cambio de arquitectura (Trees API + Filtros)
 
-// Variables globales para la cola de copiado
 let promptsFinalesListos = [];
-// NUEVO: Variable para rastrear el último índice de prompt copiado correctamente
 let ultimoIndiceCopiado = -1;
-
-// NUEVO: Marca de confirmación de parte completa para evitar truncados silenciosos
 const MARCA_FIN_PARTE = "\n\n[✅ FIN DE LA PARTE PROMPT ENVIADA - Este fragmento está completo y no ha sido truncado]";
 
-// Diccionario de órdenes e instrucciones prefijadas
-const PLANTILLAS_ORDENES = {
+// NUEVO: Lista de extensiones que por defecto no se marcarán
+const EXTENSIONES_EXCLUIDAS_DEFECTO = [
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico', '.tif', '.tiff',
+    '.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.mp3', '.wav',
+    '.zip', '.tar', '.gz', '.rar', '.7z', '.bz2', '.iso', '.dmg'
+];
+
+// NUEVO: Variables globales para guardar el árbol mientras el usuario elige filtros
+let arbolArchivosPrincipal = [];
+let arbolArchivosSecundario = [];
+let configReposGlobal = {};
+
+const PLANTILLAS_ORDENES = { /* ... Sin cambios ... */
     analizar: "Analiza detalladamente la arquitectura de este proyecto. Explica cómo se comunican los componentes, los flujos de datos principales y enumera las dependencias críticas detectadas.",
     bugs: "Revisa exhaustivamente todo el código provisto en busca de errores de lógica, fallas de seguridad potenciales, fugas de memoria o malas prácticas. Muestra los puntos críticos y propón sus correcciones exactas.",
     refactor: "Actúa como un ingeniero de software experto en refactorización. Revisa los archivos e identifica bloques redundantes o ineficientes. Proporciona una version optimizada del código que mejore el rendimiento y la legibilidad.",
@@ -25,9 +30,6 @@ const PLANTILLAS_ORDENES = {
     fusionar: "Actúa como un arquitecto de software experto en integración de sistemas. Tu objetivo es auditar el Repositorio Principal y el Repositorio de Referencia Secundaria. 1) Identifica funciones, utilidades, componentes o patrones de diseño presentes en el repositorio SECUNDARIO que puedan mejorar, optimizar o añadir funcionalidades faltantes al repositorio PRINCIPAL. 2) Para cada mejora identificada, proporciona el código exacto listo para implementar en el PRINCIPAL, adaptando la lógica para que sea 100% compatible con su arquitectura actual, sin romper flujos existentes y manejando el DOM de forma defensiva. 3) Si no encuentras nada útil que adoptar, indícalo expresamente."
 };
 
-/**
- * REGLAS INTRÍNSECAS DE RESPUESTA (INYECTADAS AUTOMÁTICAMENTE)
- */
 const REGLAS_EMPAQUETADO_SISTEMA = 
 `\n\n=========================================\n` +
 `NORMAS DE SALIDA OBLIGATORIAS PARA LA IA:\n` +
@@ -59,8 +61,6 @@ const REGLAS_EMPAQUETADO_SISTEMA =
 `25. ORDEN DE PRIORIDAD: En caso de conflicto entre optimización, refactorización, limpieza de código y preservación del comportamiento existente, debe prevalecer siempre la preservación del comportamiento actual del sistema.\n` +
 `26. UNIÓN DE ARCHIVOS DIVIDIDOS: Si un archivo de código ha sido dividido en múltiples partes debido a limitaciones de tamaño, lo verás marcado explícitamente con "[🔒 ARCHIVO DIVIDIDO]". Debes interpretar y unir mentalmente todas las partes del archivo afectado como un todo continuo antes de analizarlo o modificarlo. No trates las partes divididas como archivos independientes.\n`;
 
-// Protocolo de inicialización para la Parte 1
-// MODIFICADO: Instrucciones robustecidas para obligar silencio total de la IA y retención exclusiva en memoria
 const PROTOCOLO_INICIO = 
 `=========================================\n` +
 `PROTOCOLO DE TRANSMISIÓN DE CONTEXTO\n` +
@@ -73,33 +73,22 @@ const PROTOCOLO_INICIO =
 
 document.addEventListener('DOMContentLoaded', () => {
     const versionBadgeApp = document.getElementById('versionApp');
-    if (versionBadgeApp) {
-        versionBadgeApp.innerText = `App: v${VER_APP}`;
-    }
+    if (versionBadgeApp) versionBadgeApp.innerText = `App: v${VER_APP}`;
+    
     actualizarDesplegableHistorial();
     const urlGuardada = localStorage.getItem('last_github_repo');
-    if (urlGuardada) {
-        const repoUrlInput = document.getElementById('repoUrl');
-        if (repoUrlInput) repoUrlInput.value = urlGuardada;
-    }
+    if (urlGuardada) document.getElementById('repoUrl').value = urlGuardada;
+    
     const urlSecundariaGuardada = localStorage.getItem('last_github_repo_secondary');
-    if (urlSecundariaGuardada) {
-        const repoUrlSecundarioInput = document.getElementById('repoUrlSecundario');
-        if (repoUrlSecundarioInput) repoUrlSecundarioInput.value = urlSecundariaGuardada;
-    }
+    if (urlSecundariaGuardada) document.getElementById('repoUrlSecundario').value = urlSecundariaGuardada;
+    
     const limitGuardado = localStorage.getItem('last_limit_select');
-    if (limitGuardado) {
-        const limitSelectInput = document.getElementById('limitSelect');
-        if (limitSelectInput) limitSelectInput.value = limitGuardado;
-    }
+    if (limitGuardado) document.getElementById('limitSelect').value = limitGuardado;
 });
 
 function aplicarOrdenPrefijada(clavePlantilla) {
     const textoInyectar = PLANTILLAS_ORDENES[clavePlantilla];
-    if (textoInyectar) {
-        const instruccionesInput = document.getElementById('instrucciones');
-        if (instruccionesInput) instruccionesInput.value = textoInyectar;
-    }
+    if (textoInyectar) document.getElementById('instrucciones').value = textoInyectar;
 }
 
 function guardarEnHistorial(url) {
@@ -116,10 +105,8 @@ function actualizarDesplegableHistorial() {
     const historial = JSON.parse(localStorage.getItem('github_repo_history') || '[]');
     const select = document.getElementById('repoHistorySelect');
     if (!select) return;
-    if (historial.length === 0) {
-        select.style.display = 'none';
-        return;
-    }
+    if (historial.length === 0) { select.style.display = 'none'; return; }
+    
     select.innerHTML = '<option value="" disabled selected>📂 Historial de repositorios usados...</option>';
     historial.forEach(url => {
         const option = document.createElement('option');
@@ -128,370 +115,423 @@ function actualizarDesplegableHistorial() {
         select.appendChild(option);
     });
     select.style.display = 'block';
-    select.onchange = null; 
-    select.onchange = (e) => {
-        if (e.target.value) {
-            const repoUrlInput = document.getElementById('repoUrl');
-            if (repoUrlInput) repoUrlInput.value = e.target.value;
-        }
-    };
+    select.onchange = (e) => { if (e.target.value) document.getElementById('repoUrl').value = e.target.value; };
 }
 
 function limpiarInterfaz() {
-    const repoUrl = document.getElementById('repoUrl');
-    const repoUrlSecundario = document.getElementById('repoUrlSecundario');
-    const instrucciones = document.getElementById('instrucciones');
-    const ordenesPredeterminadas = document.getElementById('ordenesPredeterminadas');
-    if (repoUrl) repoUrl.value = '';
-    if (repoUrlSecundario) repoUrlSecundario.value = '';
-    if (instrucciones) instrucciones.value = '';
-    if (ordenesPredeterminadas) ordenesPredeterminadas.value = '';
-    const previewBox = document.getElementById('previewBox');
-    const queueContainer = document.getElementById('queueContainer');
-    if (previewBox) previewBox.style.display = "none";
-    if (queueContainer) queueContainer.style.display = "none";
+    document.getElementById('repoUrl').value = '';
+    document.getElementById('repoUrlSecundario').value = '';
+    document.getElementById('instrucciones').value = '';
+    document.getElementById('ordenesPredeterminadas').value = '';
+    document.getElementById('previewBox').style.display = "none";
+    document.getElementById('filterSection').style.display = "none";
+    document.getElementById('queueContainer').style.display = "none";
+    
     const status = document.getElementById('statusCarga');
-    if (status) {
-        status.style.display = "none";
-        status.innerText = "";
-    }
+    status.style.display = "none"; status.innerText = "";
+    
     const btnGenerar = document.getElementById('btnGenerar');
-    if (btnGenerar) {
-        btnGenerar.disabled = false;
-        btnGenerar.innerText = "⚡ GENERAR PROMPTS";
-        btnGenerar.style.display = "block";
-    }
-    const btnReset = document.getElementById('btnReset');
-    if (btnReset) btnReset.style.display = "none";
+    btnGenerar.disabled = false; btnGenerar.innerText = "⚡ GENERAR PROMPTS"; btnGenerar.style.display = "block";
+    document.getElementById('btnReset').style.display = "none";
     
-    // NUEVO: Reiniciar el tracking del orden de copiado al limpiar la interfaz
     ultimoIndiceCopiado = -1;
-    
+    arbolArchivosPrincipal = []; arbolArchivosSecundario = [];
     actualizarDesplegableHistorial();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function parsearGitHubUrl(url) {
-    const regex = /github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+))?/;
+    const regex = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/([^/]+))?$/;
     const match = url.match(regex);
     if (!match) return null;
     return { user: match[1], repo: match[2], branch: match[3] || 'main' };
 }
 
-async function obtenerBloquesCodigo(datosRepo, esPrincipal = true) {
-    const extensionesPermitidas = ['.js', '.html', '.css', '.json', '.txt', '.md'];
-    let bloques = [];
-    let nombresArchivos = [];
-    const apiUrl = `https://api.github.com/repos/${datosRepo.user}/${datosRepo.repo}/contents?ref=${datosRepo.branch}`;
+// NUEVO: Usa la API de Trees para obtener TODOS los archivos recursivamente
+async function obtenerArbolCompleto(datosRepo) {
+    const apiUrl = `https://api.github.com/repos/${datosRepo.user}/${datosRepo.repo}/git/trees/${datosRepo.branch}?recursive=1`;
     const response = await fetch(apiUrl);
-    if (!response.ok) throw new Error(`No se pudo acceder al repositorio: ${datosRepo.repo}`);
-    const archivos = await response.json();
-    if (!Array.isArray(archivos)) throw new Error(`La API de GitHub no retornó un árbol válido.`);
-    for (const archivo of archivos) {
-        if (archivo.type === 'file') {
-            const tieneExtensionValida = extensionesPermitidas.some(ext => archivo.name.endsWith(ext));
-            if (tieneExtensionValida && archivo.name !== 'package-lock.json') {
-                try {
-                    const resContenido = await fetch(archivo.download_url);
-                    if (!resContenido.ok) continue; 
-                    const texto = await resContenido.text();
-                    nombresArchivos.push(archivo.name);
-                    let bloque = `\n=========================================\n`;
-                    bloque += `REPOSITORIO: ${datosRepo.repo} (${esPrincipal ? 'PRINCIPAL' : 'REFERENCIA SECUNDARIA'})\n`;
-                    bloque += `ARCHIVO: ${archivo.name}\n`;
-                    bloque += `=========================================\n`;
-                    bloque += `${texto}\n`;
-                    bloques.push(bloque);
-                } catch (errArchivo) {
-                    console.warn(`No se pudo descargar el contenido de ${archivo.name}:`, errArchivo);
-                }
-            }
-        }
-    }
-    return { bloques, nombresArchivos };
+    if (!response.ok) throw new Error(`No se pudo acceder al árbol del repositorio: ${datosRepo.repo} (¿Rama correcta?)`);
+    const data = await response.json();
+    if (!data.tree) throw new Error("La API no devolvió un árbol válido.");
+    // Filtrar solo archivos (type 'blob'), ignorar carpetas
+    return data.tree.filter(item => item.type === 'blob');
 }
 
+// NUEVO: Genera los checkboxes dinámicamente
+function renderizarFiltrosExtensiones() {
+    const todasLasRutas = [...arbolArchivosPrincipal, ...arbolArchivosSecundario];
+    const extensionesSet = new Set();
+
+    todasLasRutas.forEach(file => {
+        const partes = file.path.split('.');
+        if (partes.length > 1) {
+            extensionesSet.add('.' + partes.pop().toLowerCase());
+        } else {
+            extensionesSet.add('(sin extensión)');
+        }
+    });
+
+    const contenedor = document.getElementById('extensionFilters');
+    contenedor.innerHTML = '';
+    
+    Array.from(extensionesSet).sort().forEach(ext => {
+        const estaExcluida = EXTENSIONES_EXCLUIDAS_DEFECTO.includes(ext);
+        const id = `chk-${ext === '(sin extensión)' ? 'none' : ext.substring(1)}`;
+        
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.gap = '8px';
+        div.innerHTML = `
+            <input type="checkbox" id="${id}" value="${ext}" ${!estaExcluida ? 'checked' : ''} style="cursor:pointer; width:18px; height:18px;">
+            <label for="${id}" style="margin:0; font-weight:400; font-size:0.9rem; cursor:pointer; color: ${estaExcluida ? '#94a3b8' : 'var(--text)'}">${ext}</label>
+        `;
+        contenedor.appendChild(div);
+    });
+
+    document.getElementById('filterSection').style.display = 'block';
+}
+
+// MODIFICADO: Ahora esta función solo lee las URLs y prepara la primera fase
 async function construirSuperPrompt() {
     const urlInput = document.getElementById('repoUrl')?.value.trim();
     const urlSecundariaInput = document.getElementById('repoUrlSecundario')?.value.trim();
-    const instrucciones = document.getElementById('instrucciones')?.value.trim();
-    const limitSelectEl = document.getElementById('limitSelect');
-    // MODIFICADO: Fallback aumentado a 50000 caracteres para disminuir la cantidad de paquetes generados
-    const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 50000;
     const btn = document.getElementById('btnGenerar');
-    const btnReset = document.getElementById('btnReset');
     const status = document.getElementById('statusCarga');
     const previewBox = document.getElementById('previewBox');
-    const listaArchivos = document.getElementById('listaArchivos');
     const queueContainer = document.getElementById('queueContainer');
-    const partQueue = document.getElementById('partQueue');
-    const btnCopiarTodo = document.getElementById('btnCopiarTodo');
+
     if (!urlInput) { alert("Por favor, introduce una URL de GitHub principal."); return; }
     
-    const overheadMinimo = 1500; 
-    if (instrucciones && (instrucciones.length + overheadMinimo) > MAX_CARACTERES_POR_PROMPT) {
-        alert(`❌ Tu instrucción tiene ${instrucciones.length} caracteres, lo cual excede el límite de contexto de ${MAX_CARACTERES_POR_PROMPT} caracteres seleccionado. La IA la cortará de forma segura. Por favor, reduce tu instrucción o aumenta el límite superior (Contexto).`);
-        if (btn) { btn.disabled = false; btn.innerText = "⚡ REINTENTAR"; }
-        return;
-    }
-
-    localStorage.setItem('last_github_repo', urlInput);
-    localStorage.setItem('last_limit_select', MAX_CARACTERES_POR_PROMPT);
-    guardarEnHistorial(urlInput);
-    if (urlSecundariaInput) {
-        localStorage.setItem('last_github_repo_secondary', urlSecundariaInput);
-        guardarEnHistorial(urlSecundariaInput);
-    } else {
-        localStorage.removeItem('last_github_repo_secondary');
-    }
     const datosRepoPrincipal = parsearGitHubUrl(urlInput);
     if (!datosRepoPrincipal) { alert("Formato de URL principal no reconocido."); return; }
+    
     let datosRepoSecundario = null;
     if (urlSecundariaInput) {
         datosRepoSecundario = parsearGitHubUrl(urlSecundariaInput);
         if (!datosRepoSecundario) { alert("Formato de URL secundaria no reconocido."); return; }
     }
-    if (btn) btn.disabled = true;
-    if (status) {
-        status.style.display = "block";
-        status.style.color = "#38bdf8";
-        status.innerText = "⏳ Leyendo estructura del repositorio principal...";
-    }
+
+    // Guardar en localStorage
+    localStorage.setItem('last_github_repo', urlInput);
+    localStorage.setItem('last_limit_select', document.getElementById('limitSelect').value);
+    guardarEnHistorial(urlInput);
+    if (urlSecundariaInput) { localStorage.setItem('last_github_repo_secondary', urlSecundariaInput); guardarEnHistorial(urlSecundariaInput); }
+    else { localStorage.removeItem('last_github_repo_secondary'); }
+
+    // Guardar configs globales para la siguiente fase
+    configReposGlobal = { datosRepoPrincipal, datosRepoSecundario };
+
+    btn.disabled = true;
+    status.style.display = "block"; status.style.color = "#38bdf8";
+    queueContainer.style.display = "none";
+    
     try {
-        let todosLosBloquesArchivos = [];
-        let htmlPreviewArchivos = "";
-        const resultadoPrincipal = await obtenerBloquesCodigo(datosRepoPrincipal, true);
-        if (resultadoPrincipal.nombresArchivos.length === 0) throw new Error("No se encontraron archivos válidos.");
-        todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoPrincipal.bloques);
-        htmlPreviewArchivos += `<div class="repo-section-title">📂 Principal (${datosRepoPrincipal.repo}):</div>`;
-        htmlPreviewArchivos += resultadoPrincipal.nombresArchivos.map(name => `<span class="file-tag">📄 ${name}</span>`).join('');
+        status.innerText = "⏳ Escaneando estructura completa del repositorio principal...";
+        arbolArchivosPrincipal = await obtenerArbolCompleto(datosRepoPrincipal);
+        
+        if (arbolArchivosPrincipal.length === 0) throw new Error("El repositorio principal está vacío o no se encontraron archivos.");
+
         if (datosRepoSecundario) {
-            status.innerText = "⏳ Leyendo estructura del repositorio secundario...";
-            const resultadoSecundario = await obtenerBloquesCodigo(datosRepoSecundario, false);
-            if (resultadoSecundario.nombresArchivos.length > 0) {
-                todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resultadoSecundario.bloques);
-                htmlPreviewArchivos += `<div class="repo-section-title" style="margin-top:15px;">📂 Secundario de Referencia (${datosRepoSecundario.repo}):</div>`;
-                htmlPreviewArchivos += resultadoSecundario.nombresArchivos.map(name => `<span class="file-tag" style="border-left: 3px solid var(--accent);">📄 ${name}</span>`).join('');
-            }
-        }
-        status.innerText = "⏳ Armando secuencia de prompts y verificando integridad de archivos...";
-        
-        const longitudInstrucciones = instrucciones ? instrucciones.length : 0;
-        const longitudReglas = REGLAS_EMPAQUETADO_SISTEMA.length;
-        const longitudProtocolo = PROTOCOLO_INICIO.length;
-        const MARGEN_SEGURIDAD = 1500; 
-        
-        const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD + MARCA_FIN_PARTE.length));
-
-        let bloquesProcesados = [];
-        for (const bloque of todosLosBloquesArchivos) {
-            if (bloque.length <= limiteEfectivoCodigo) {
-                bloquesProcesados.push(bloque);
-            } else {
-                const lineas = bloque.split('\n');
-                
-                let headerLines = [];
-                let separatorCount = 0;
-                for (let i = 0; i < lineas.length; i++) {
-                    headerLines.push(lineas[i]);
-                    if (lineas[i].includes('=========================================')) {
-                        separatorCount++;
-                        if (separatorCount === 2) break;
-                    }
-                }
-                const headerStr = headerLines.join('\n') + '\n';
-                const codeLines = lineas.slice(headerLines.length);
-                
-                let fragmentosCodigo = [];
-                let subBloque = "";
-                
-                for (const linea of codeLines) {
-                    if ((headerStr.length + linea.length + 300) > limiteEfectivoCodigo) {
-                        if (subBloque.trim() !== "") {
-                            fragmentosCodigo.push(subBloque);
-                            subBloque = "";
-                        }
-                        fragmentosCodigo.push(linea + '\n');
-                    } 
-                    else if ((headerStr.length + subBloque.length + linea.length + 300) > limiteEfectivoCodigo) {
-                        if (subBloque.trim() !== "") {
-                            fragmentosCodigo.push(subBloque);
-                        }
-                        subBloque = linea + '\n';
-                    } 
-                    else {
-                        subBloque += linea + '\n';
-                    }
-                }
-                if (subBloque.trim() !== "") {
-                    fragmentosCodigo.push(subBloque);
-                }
-
-                const totalPartes = fragmentosCodigo.length;
-                for (let i = 0; i < totalPartes; i++) {
-                    const parteNum = i + 1;
-                    const codigo = fragmentosCodigo[i];
-                    
-                    const modifiedHeader = headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
-                    
-                    const markerStart = parteNum === 1 
-                        ? `// [🔒 ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - POR FAVOR UNIR MENTALMENTE]\n` 
-                        : `// [🔒 CONTINUACIÓN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes} - UNIR CON PARTE ANTERIOR]\n`;
-                        
-                    const markerEnd = parteNum < totalPartes 
-                        ? `\n// [🔒 FIN DE PARTE ${parteNum}. CONTINÚA EN LA SIGUIENTE PARTE]` 
-                        : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]`;
-                        
-                    bloquesProcesados.push(modifiedHeader + markerStart + codigo + markerEnd);
-                }
-            }
+            status.innerText = "⏳ Escaneando repositorio secundario...";
+            arbolArchivosSecundario = await obtenerArbolCompleto(datosRepoSecundario);
+        } else {
+            arbolArchivosSecundario = [];
         }
 
-        let listaPromptsAGenerar = [];
-        let acumulador = "";
+        // Mostrar vista previa y filtros
+        const listaArchivos = document.getElementById('listaArchivos');
+        listaArchivos.innerHTML = `<div class="repo-section-title">📂 Principal (${datosRepoPrincipal.repo}): <span style="color:#94a3b8; font-weight:400;">${arbolArchivosPrincipal.length} archivos encontrados</span></div>`;
         
-        const estimacionOverheadMaximo = longitudInstrucciones + longitudReglas + longitudProtocolo + 500 + MARCA_FIN_PARTE.length; 
-        const limiteContenido = MAX_CARACTERES_POR_PROMPT - estimacionOverheadMaximo;
-
-        for (const bloque of bloquesProcesados) {
-            if (bloque.trim() === "") continue; 
-            if (acumulador !== "" && (acumulador.length + bloque.length) > limiteContenido) {
-                listaPromptsAGenerar.push(acumulador);
-                acumulador = bloque;
-            } else if (acumulador === "") {
-                acumulador = bloque;
-            } else {
-                acumulador += bloque;
-            }
+        if (arbolArchivosSecundario.length > 0) {
+            listaArchivos.innerHTML += `<div class="repo-section-title" style="margin-top:15px;">📂 Secundario (${datosRepoSecundario.repo}): <span style="color:#94a3b8; font-weight:400;">${arbolArchivosSecundario.length} archivos encontrados</span></div>`;
         }
-        if (acumulador !== "") {
-            listaPromptsAGenerar.push(acumulador);
-        }
-        
-        promptsFinalesListos = [];
-        const totalPartes = listaPromptsAGenerar.length;
-        
-        listaPromptsAGenerar.forEach((contenido, index) => {
-            const num = index + 1;
-            const esPrimera = num === 1;
-            const esUltima = num === totalPartes;
-            let texto = "";
 
-            if (esPrimera && esUltima) {
-                // MODIFICADO: Añadido comando explícito de reinicio total de memoria para consultas únicas
-                texto += `[AVISO DE NUEVO PROYECTO: RESETEA COMPLETA MENTE TU MEMORIA ANTERIOR] Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
-            } else if (esPrimera) {
-                // MODIFICADO: Añadido comando explícito de reinicio total de memoria al arrancar un lote multipartes
-                texto += `[AVISO DE NUEVO PROYECTO: RESETEA COMPLETA MENTE TU MEMORIA ANTERIOR] Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
-                texto += PROTOCOLO_INICIO; 
-            } else if (esUltima) {
-                texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
-            } else {
-                texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
-            }
-
-            if (instrucciones) {
-                if (esPrimera && !esUltima) {
-                    texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
-                } else if (esUltima) {
-                    texto += `OBJETIVO: ${instrucciones}\n\n`;
-                }
-            }
-
-            if (esUltima) {
-                texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
-            }
-
-            texto += `ESTRUCTURA DEL CÓDIGO (PARTE ${num}):\n${contenido}\n`;
-            
-            if (esUltima) {
-                texto += `\nFIN DEL CONTEXTO. Procesa todo el material provisto y ejecuta el OBJETIVO cumpliendo estrictamente con las NORMAS DE SALIDA OBLIGATORIAS.`;
-            } else {
-                texto += `\n=========================================\n`;
-                texto += `🛑 ¡INSTRUCCIÓN CRÍTICA DE CONTROL PARA LA IA! 🛑\n`;
-                texto += `Este mensaje es SOLO la Parte ${num} de un total de ${totalPartes} partes de contexto.\n`;
-                texto += `Está ABSOLUTAMENTE PROHIBIDO empezar a ejecutar el objetivo, analizar el código o generar respuestas técnicas todavía.\n`;
-                texto += `Para confirmar que has entendido que debes esperar a las partes restantes, responde EXCLUSIVAMENTE con la siguiente línea de texto, sin añadir saludos, disculpas ni comentarios adicionales:\n\n`;
-                texto += `"Entendido. Parte ${num} recibida y almacenada en contexto. Quedo a la espera de la Parte ${num + 1}."`;
-            }
-            
-            texto += MARCA_FIN_PARTE;
-
-            promptsFinalesListos.push(texto);
-        });
-        
-        // NUEVO: Reiniciar la secuencia de tracking interno cada vez que se genera un set nuevo de prompts
-        ultimoIndiceCopiado = -1;
-
+        status.innerText = "✅ Estructura leída. Selecciona los tipos de archivo y haz clic en 'Aplicar Filtros'.";
         status.style.color = "#10b981";
-        status.innerText = `✅ ¡Prompts generados! (Total: ${totalPartes} partes)`;
-        if (btn) { btn.innerText = "✅ COLA LISTA"; btn.disabled = true; btn.style.display = "none"; }
-        if (btnReset) btnReset.style.display = "block";
-        if (previewBox) previewBox.style.display = "block";
-        if (listaArchivos) listaArchivos.innerHTML = htmlPreviewArchivos;
-        if (queueContainer) queueContainer.style.display = "block";
-        if (partQueue) partQueue.innerHTML = "";
-        if (totalPartes === 1) { copiarParte(0); } else {
-            if (btnCopiarTodo) btnCopiarTodo.style.display = "block";
-            promptsFinalesListos.forEach((textoParte, index) => {
-                const charCount = textoParte.length;
-                const minTokens = Math.round(charCount / 4);
-                const maxTokens = Math.round(charCount / 3);
+        
+        previewBox.style.display = "block";
+        renderizarFiltrosExtensiones();
+        
+        btn.innerText = "⏳ ESPERANDO FILTROS...";
+        btn.disabled = true; // Se habilitará al aplicar filtros o limpiar
 
-                let advertencia = "";
-                if (charCount > MAX_CARACTERES_POR_PROMPT) {
-                    advertencia = `<span style="color:var(--danger); font-weight:700; margin-left:10px;">⚠️ EXCEDE LÍMITE (${charCount.toLocaleString()} / ${MAX_CARACTERES_POR_PROMPT.toLocaleString()} chars) - LA IA LO TRUNCARÁ</span>`;
-                }
-
-                const div = document.createElement('div');
-                div.className = 'queue-item';
-                div.id = `queue-item-${index}`;
-                div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes} <span style="color:#94a3b8; font-size:0.85rem; font-weight:400;">(Entre ${minTokens.toLocaleString()}/${maxTokens.toLocaleString()} tokens aprox)</span>${advertencia}</span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
-                partQueue.appendChild(div);
-            });
-        }
     } catch (error) {
         console.error(error);
-        if (status) { status.style.color = "#ef4444"; status.innerText = `❌ Error: ${error.message}`; }
-        if (btn) { btn.disabled = false; btn.innerText = "⚡ REINTENTAR"; }
+        status.style.color = "#ef4444"; status.innerText = `❌ Error: ${error.message}`;
+        btn.disabled = false; btn.innerText = "⚡ REINTENTAR";
+    }
+}
+
+// NUEVO: Se ejecuta al hacer clic en "Aplicar Filtros y Generar Prompts"
+async function aplicarFiltrosYGenerar() {
+    const status = document.getElementById('statusCarga');
+    const btnGenerar = document.getElementById('btnGenerar');
+    const btnReset = document.getElementById('btnReset');
+    const limitSelectEl = document.getElementById('limitSelect');
+    const MAX_CARACTERES_POR_PROMPT = limitSelectEl ? parseInt(limitSelectEl.value) : 50000;
+    const instrucciones = document.getElementById('instrucciones')?.value.trim();
+
+    // 1. Leer qué extensiones están marcadas
+    const checkboxes = document.querySelectorAll('#extensionFilters input[type="checkbox"]:checked');
+    const extensionesPermitidas = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (extensionesPermitidas.length === 0) {
+        alert("Debes seleccionar al menos un tipo de archivo para continuar.");
+        return;
+    }
+
+    // 2. Filtrar los árboles
+    const archivosPrincipalesFiltrados = arbolArchivosPrincipal.filter(f => {
+        const ext = f.path.includes('.') ? '.' + f.path.split('.').pop().toLowerCase() : '(sin extensión)';
+        return extensionesPermitidas.includes(ext) && !f.path.endsWith('package-lock.json');
+    });
+
+    const archivosSecundariosFiltrados = arbolArchivosSecundario.filter(f => {
+        const ext = f.path.includes('.') ? '.' + f.path.split('.').pop().toLowerCase() : '(sin extensión)';
+        return extensionesPermitidas.includes(ext) && !f.path.endsWith('package-lock.json');
+    });
+
+    if (archivosPrincipalesFiltrados.length === 0 && archivosSecundariosFiltrados.length === 0) {
+        alert("Con los filtros seleccionados, no hay archivos válidos para procesar.");
+        return;
+    }
+
+    status.style.color = "#38bdf8";
+    status.innerText = `⏳ Descargando contenido de ${archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length} archivos...`;
+
+    try {
+        // 3. Descargar contenidos
+        let todosLosBloquesArchivos = [];
+        let htmlPreviewArchivos = "";
+
+        const resPrincipal = await descargarContenidos(archivosPrincipalesFiltrados, configReposGlobal.datosRepoPrincipal, true);
+        todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resPrincipal.bloques);
+        htmlPreviewArchivos += `<div class="repo-section-title">📂 Principal (Incluidos):</div>`;
+        htmlPreviewArchivos += resPrincipal.nombres.map(name => `<span class="file-tag">📄 ${name}</span>`).join('');
+
+        if (archivosSecundariosFiltrados.length > 0) {
+            const resSecundario = await descargarContenidos(archivosSecundariosFiltrados, configReposGlobal.datosRepoSecundario, false);
+            todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resSecundario.bloques);
+            htmlPreviewArchivos += `<div class="repo-section-title" style="margin-top:15px;">📂 Secundario (Incluidos):</div>`;
+            htmlPreviewArchivos += resSecundario.nombres.map(name => `<span class="file-tag" style="border-left: 3px solid var(--accent);">📄 ${name}</span>`).join('');
+        }
+
+        document.getElementById('listaArchivos').innerHTML = htmlPreviewArchivos;
+
+        // 4. Ejecutar la lógica original de troceado (con pequeñas mejoras de ruta)
+        status.innerText = "⏳ Armando secuencia de prompts y verificando integridad de archivos...";
+        await armarPromptsFinales(todosLosBloquesArchivos, configReposGlobal.datosRepoPrincipal, instrucciones, MAX_CARACTERES_POR_PROMPT);
+
+        // 5. Actualizar UI Final
+        status.style.color = "#10b981";
+        status.innerText = `✅ ¡Prompts generados! (Total: ${promptsFinalesListos.length} partes)`;
+        
+        btnGenerar.style.display = "none";
+        btnReset.style.display = "block";
+
+    } catch (error) {
+        console.error(error);
+        status.style.color = "#ef4444"; status.innerText = `❌ Error al descargar: ${error.message}`;
+    }
+}
+
+// NUEVO: Función aislada para descargar archivos basándose en su ruta completa
+async function descargarContenidos(listaArchivosFiltrada, datosRepo, esPrincipal) {
+    let bloques = [];
+    let nombres = [];
+    const baseUrl = `https://raw.githubusercontent.com/${datosRepo.user}/${datosRepo.repo}/${datosRepo.branch}/`;
+
+    for (const archivo of listaArchivosFiltrada) {
+        try {
+            // Ignorar archivos muy pesados (>500kb) para no romper el navegador
+            if (archivo.size > 500000) {
+                console.warn(`Ignorado por tamaño (>500kb): ${archivo.path}`);
+                continue;
+            }
+            const resContenido = await fetch(baseUrl + archivo.path);
+            if (!resContenido.ok) continue; 
+            const texto = await resContenido.text();
+            
+            nombres.push(archivo.path); // CAMBIADO: Ahora muestra la ruta completa (ej: src/app.js)
+            
+            let bloque = `\n=========================================\n`;
+            bloque += `REPOSITORIO: ${datosRepo.repo} (${esPrincipal ? 'PRINCIPAL' : 'REFERENCIA SECUNDARIA'})\n`;
+            bloque += `ARCHIVO: ${archivo.path}\n`; // CAMBIADO: Ruta completa
+            bloque += `=========================================\n`;
+            bloque += `${texto}\n`;
+            bloques.push(bloque);
+        } catch (errArchivo) {
+            console.warn(`Error descargando ${archivo.path}:`, errArchivo);
+        }
+    }
+    return { bloques, nombres };
+}
+
+// NUEVO: Lógica de particionado extraída para limpiar el flujo principal
+async function armarPromptsFinales(todosLosBloquesArchivos, datosRepoPrincipal, instrucciones, MAX_CARACTERES_POR_PROMPT) {
+    const overheadMinimo = 1500; 
+    if (instrucciones && (instrucciones.length + overheadMinimo) > MAX_CARACTERES_POR_PROMPT) {
+        throw new Error(`Tu instrucción (${instrucciones.length} chars) excede el límite seleccionado.`);
+    }
+
+    const longitudInstrucciones = instrucciones ? instrucciones.length : 0;
+    const longitudReglas = REGLAS_EMPAQUETADO_SISTEMA.length;
+    const longitudProtocolo = PROTOCOLO_INICIO.length;
+    const MARGEN_SEGURIDAD = 1500; 
+    
+    const limiteEfectivoCodigo = Math.max(1000, MAX_CARACTERES_POR_PROMPT - (longitudInstrucciones + longitudReglas + longitudProtocolo + MARGEN_SEGURIDAD + MARCA_FIN_PARTE.length));
+
+    let bloquesProcesados = [];
+    for (const bloque of todosLosBloquesArchivos) {
+        if (bloque.length <= limiteEfectivoCodigo) {
+            bloquesProcesados.push(bloque);
+        } else {
+            // Lógica original para archivos enormes que hay que cortar
+            const lineas = bloque.split('\n');
+            let headerLines = [];
+            let separatorCount = 0;
+            for (let i = 0; i < lineas.length; i++) {
+                headerLines.push(lineas[i]);
+                if (lineas[i].includes('=========================================')) {
+                    separatorCount++;
+                    if (separatorCount === 2) break;
+                }
+            }
+            const headerStr = headerLines.join('\n') + '\n';
+            const codeLines = lineas.slice(headerLines.length);
+            
+            let fragmentosCodigo = [];
+            let subBloque = "";
+            
+            for (const linea of codeLines) {
+                if ((headerStr.length + linea.length + 300) > limiteEfectivoCodigo) {
+                    if (subBloque.trim() !== "") { fragmentosCodigo.push(subBloque); subBloque = ""; }
+                    fragmentosCodigo.push(linea + '\n');
+                } else if ((headerStr.length + subBloque.length + linea.length + 300) > limiteEfectivoCodigo) {
+                    if (subBloque.trim() !== "") fragmentosCodigo.push(subBloque);
+                    subBloque = linea + '\n';
+                } else {
+                    subBloque += linea + '\n';
+                }
+            }
+            if (subBloque.trim() !== "") fragmentosCodigo.push(subBloque);
+
+            const totalPartes = fragmentosCodigo.length;
+            for (let i = 0; i < totalPartes; i++) {
+                const parteNum = i + 1;
+                const modifiedHeader = headerStr.replace(/ARCHIVO: (.*)/, `ARCHIVO: $1 (Parte ${parteNum}/${totalPartes})`);
+                const markerStart = parteNum === 1 ? `// [🔒 ARCHIVO DIVIDIDO - PARTE ${parteNum} DE ${totalPartes}]\n` : `// [🔒 CONTINUACIÓN - PARTE ${parteNum} DE ${totalPartes}]\n`;
+                const markerEnd = parteNum < totalPartes ? `\n// [🔒 FIN DE PARTE ${parteNum}. CONTINÚA...]` : `\n// [🔒 FIN DE ARCHIVO DIVIDIDO]`;
+                bloquesProcesados.push(modifiedHeader + markerStart + fragmentosCodigo[i] + markerEnd);
+            }
+        }
+    }
+
+    // Agrupar en paquetes finales
+    let listaPromptsAGenerar = [];
+    let acumulador = "";
+    const estimacionOverheadMaximo = longitudInstrucciones + longitudReglas + longitudProtocolo + 500 + MARCA_FIN_PARTE.length; 
+    const limiteContenido = MAX_CARACTERES_POR_PROMPT - estimacionOverheadMaximo;
+
+    for (const bloque of bloquesProcesados) {
+        if (bloque.trim() === "") continue; 
+        if (acumulador !== "" && (acumulador.length + bloque.length) > limiteContenido) {
+            listaPromptsAGenerar.push(acumulador);
+            acumulador = bloque;
+        } else if (acumulador === "") {
+            acumulador = bloque;
+        } else {
+            acumulador += bloque;
+        }
+    }
+    if (acumulador !== "") listaPromptsAGenerar.push(acumulador);
+    
+    promptsFinalesListos = [];
+    const totalPartes = listaPromptsAGenerar.length;
+    
+    listaPromptsAGenerar.forEach((contenido, index) => {
+        const num = index + 1;
+        const esPrimera = num === 1;
+        const esUltima = num === totalPartes;
+        let texto = "";
+
+        if (esPrimera && esUltima) texto += `[AVISO DE NUEVO PROYECTO: RESETEA COMPLETA MENTE TU MEMORIA ANTERIOR] Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ÚNICA.\n`;
+        else if (esPrimera) {
+            texto += `[AVISO DE NUEVO PROYECTO: RESETEA COMPLETA MENTE TU MEMORIA ANTERIOR] Hola. Proyecto "${datosRepoPrincipal.repo}". Parte ${num} de ${totalPartes}.\n\n`;
+            texto += PROTOCOLO_INICIO; 
+        } else if (esUltima) texto += `Parte FINAL (${num} de ${totalPartes}).\n`;
+        else texto += `Contexto Parte ${num} de ${totalPartes}.\n\n`;
+
+        if (instrucciones) {
+            if (esPrimera && !esUltima) texto += `OBJETIVO (NO EMPEZAR A PROCESAR NI RESPONDER TODAVÍA): ${instrucciones}\n\n`;
+            else if (esUltima) texto += `OBJETIVO: ${instrucciones}\n\n`;
+        }
+
+        if (esUltima) texto += REGLAS_EMPAQUETADO_SISTEMA + `\n`;
+        texto += `ESTRUCTURA DEL CÓDIGO (PARTE ${num}):\n${contenido}\n`;
+        
+        if (esUltima) texto += `\nFIN DEL CONTEXTO. Procesa todo el material provisto y ejecuta el OBJETIVO cumpliendo estrictamente con las NORMAS DE SALIDA OBLIGATORIAS.`;
+        else {
+            texto += `\n=========================================\n🛑 ¡INSTRUCCIÓN CRÍTICA DE CONTROL PARA LA IA! 🛑\nEste mensaje es SOLO la Parte ${num} de un total de ${totalPartes} partes de contexto.\nEstá ABSOLUTAMENTE PROHIBIDO empezar a ejecutar el objetivo, analizar el código o generar respuestas técnicas todavía.\nPara confirmar que has entendido que debes esperar a las partes restantes, responde EXCLUSIVAMENTE con la siguiente línea de texto, sin añadir saludos, disculpas ni comentarios adicionales:\n\n"Entendido. Parte ${num} recibida y almacenada en contexto. Quedo a la espera de la Parte ${num + 1}."`;
+        }
+        texto += MARCA_FIN_PARTE;
+        promptsFinalesListos.push(texto);
+    });
+        
+    ultimoIndiceCopiado = -1;
+    renderizarColaCopiado(totalPartes, MAX_CARACTERES_POR_PROMPT);
+}
+
+// NUEVO: Función para pintar la cola final (para no repetir código)
+function renderizarColaCopiado(totalPartes, MAX_CARACTERES_POR_PROMPT) {
+    const queueContainer = document.getElementById('queueContainer');
+    const partQueue = document.getElementById('partQueue');
+    const btnCopiarTodo = document.getElementById('btnCopiarTodo');
+    
+    queueContainer.style.display = "block";
+    partQueue.innerHTML = "";
+    
+    if (totalPartes === 1) { 
+        copiarParte(0); 
+    } else {
+        btnCopiarTodo.style.display = "block";
+        promptsFinalesListos.forEach((textoParte, index) => {
+            const charCount = textoParte.length;
+            const minTokens = Math.round(charCount / 4);
+            const maxTokens = Math.round(charCount / 3);
+            let advertencia = "";
+            if (charCount > MAX_CARACTERES_POR_PROMPT) advertencia = `<span style="color:var(--danger); font-weight:700; margin-left:10px;">⚠️ EXCEDE LÍMITE</span>`;
+
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.id = `queue-item-${index}`;
+            div.innerHTML = `<span class="queue-item-info">Parte ${index + 1} de ${totalPartes} <span style="color:#94a3b8; font-size:0.85rem; font-weight:400;">(~${minTokens}/${maxTokens} tokens)</span>${advertencia}</span><button class="copy-part-btn" id="copyBtn-${index}" onclick="copiarParte(${index})">📋 Copiar Parte ${index + 1}</button>`;
+            partQueue.appendChild(div);
+        });
     }
 }
 
 function copiarParte(index) {
-    // NUEVO: Verificación quirúrgica de orden secuencial estricto
     if (index > ultimoIndiceCopiado + 1) {
-        const confirmarSalto = confirm(`⚠️ ¡Atención! Estás intentando copiar la Parte ${index + 1} pero la última que copiaste fue la Parte ${ultimoIndiceCopiado + 1}.\n\nPara que la IA no sufra lagunas de información, se recomienda seguir el orden correlativo.\n\n¿Quieres saltar a esta parte de todas formas?`);
+        const confirmarSalto = confirm(`⚠️ ¡Atención! Estás intentando copiar la Parte ${index + 1} pero la última fue la ${ultimoIndiceCopiado + 1}.\n\n¿Quieres saltar de todas formas?`);
         if (!confirmarSalto) return;
     }
-
     const texto = promptsFinalesListos[index];
     if (!texto) return;
     navigator.clipboard.writeText(texto).then(() => {
-        // NUEVO: Registrar el índice actual como el último copiado si avanza o el usuario fuerza el salto
         ultimoIndiceCopiado = index;
-
         const btn = document.getElementById(`copyBtn-${index}`);
-        if (btn) {
-            btn.innerText = "✅ ¡Copiado!";
-            setTimeout(() => btn.innerText = `📋 Copiar Parte ${index + 1}`, 2500);
-        }
-    }).catch(err => { 
-        console.error('Error al copiar al portapapeles:', err);
-        alert("Error al copiar la parte. Por favor, copia manualmente.");
-    });
+        if (btn) { btn.innerText = "✅ ¡Copiado!"; setTimeout(() => btn.innerText = `📋 Copiar Parte ${index + 1}`, 2500); }
+    }).catch(err => { console.error('Error al copiar:', err); alert("Error al copiar la parte."); });
 }
 
 function copiarTodoElPrompt() {
     const textoCompleto = promptsFinalesListos.join("\n\n");
     navigator.clipboard.writeText(textoCompleto).then(() => {
         const btnAll = document.getElementById('btnCopiarTodo');
-        if (btnAll) {
-            btnAll.innerText = "✅ ¡TODO COPIADO!";
-            setTimeout(() => btnAll.innerText = "📄 COPIAR TODO EN UNO", 3000);
-        }
-    }).catch(err => { 
-        console.error('Error al copiar al portapapeles:', err);
-        alert("Error al copiar todo el prompt. Por favor, copia manualmente.");
-    });
+        if (btnAll) { btnAll.innerText = "✅ ¡TODO COPIADO!"; setTimeout(() => btnAll.innerText = "📄 COPIAR TODO EN UNO", 3000); }
+    }).catch(err => { console.error('Error al copiar:', err); alert("Error al copiar todo."); });
 }
 // [🔒 FIN DE ARCHIVO DIVIDIDO - TOTALIDAD COMPLETA EN UN SÓLO BLOQUE DE SALIDA]
