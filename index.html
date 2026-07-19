@@ -257,7 +257,8 @@
             <div id="extensionFilters" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; max-height: 300px; overflow-y: auto;">
                 <!-- Los checkboxes se inyectarán aquí desde JavaScript -->
             </div>
-            <button class="copy-all-btn" style="margin-top: 15px;" onclick="aplicarFiltrosYGenerar()">🔄 Aplicar Filtros y Generar Prompts</button>
+            <!-- MODIFICADO: Añadido id="btnAplicarFiltros" para control de estado -->
+            <button id="btnAplicarFiltros" class="copy-all-btn" style="margin-top: 15px;" onclick="aplicarFiltrosYGenerar()">🔄 Aplicar Filtros y Generar Prompts</button>
         </div>
         <!-- FIN NUEVA SECCIÓN -->
 
