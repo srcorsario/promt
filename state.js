@@ -7,3 +7,5 @@ let arbolArchivosPrincipal = [];
 let arbolArchivosSecundario = [];
 let configReposGlobal = {};
 let appScriptArchivosExtraCount = 0;
+// NUEVO: Almacena el texto del archivo CSV subido
+let csvFileData = null; 
