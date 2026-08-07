@@ -1,3 +1,4 @@
+// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 2]
 // =========================================
 // REPOSITORIO: promt (PRINCIPAL)
 // ARCHIVO: app.js
@@ -20,6 +21,9 @@ const EXTENSIONES_EXCLUIDAS_DEFECTO = [
 let arbolArchivosPrincipal = [];
 let arbolArchivosSecundario = [];
 let configReposGlobal = {};
+
+// NUEVO: Contador para archivos extra de Apps Script
+let appScriptArchivosExtraCount = 0;
 
 const PLANTILLAS_ORDENES = { /* ... Sin cambios ... */
     analizar: "Analiza detalladamente la arquitectura de este proyecto. Explica cómo se comunican los componentes, los flujos de datos principales y enumera las dependencias críticas detectadas.",
@@ -141,6 +145,21 @@ function limpiarInterfaz() {
         btnAplicarFiltros.innerText = "🔄 Aplicar Filtros y Generar Prompts";
     }
 
+    // NUEVO: Limpiar Google Sheets
+    const gsUrl = document.getElementById('googleSheetUrl');
+    if (gsUrl) gsUrl.value = '';
+    const gsSection = document.getElementById('googleSheetSection');
+    if (gsSection) gsSection.style.display = 'none';
+    const gsCode = document.getElementById('appScriptCode');
+    if (gsCode) gsCode.value = '';
+    const gsExtras = document.getElementById('appScriptExtraFiles');
+    if (gsExtras) gsExtras.innerHTML = '';
+    appScriptArchivosExtraCount = 0;
+    
+    // NUEVO: Ocultar listado completo
+    const fullTreeContainer = document.getElementById('fullFileTreeContainer');
+    if (fullTreeContainer) fullTreeContainer.style.display = 'none';
+
     ultimoIndiceCopiado = -1;
     arbolArchivosPrincipal = []; arbolArchivosSecundario = [];
     actualizarDesplegableHistorial();
@@ -206,6 +225,39 @@ function renderizarFiltrosExtensiones() {
     document.getElementById('filterSection').style.display = 'block';
 }
 
+// NUEVO: Muestra u oculta la sección de Google Apps Script
+function toggleGoogleSheetSection() {
+    const inputUrl = document.getElementById('googleSheetUrl');
+    const section = document.getElementById('googleSheetSection');
+    if (inputUrl && section) {
+        section.style.display = inputUrl.value.trim() !== '' ? 'block' : 'none';
+    }
+}
+
+// NUEVO: Añade campos dinámicos para más archivos de Apps Script
+function añadirArchivoAppScript() {
+    appScriptArchivosExtraCount++;
+    const container = document.getElementById('appScriptExtraFiles');
+    if (!container) return;
+
+    const div = document.createElement('div');
+    div.className = 'app-script-file-group';
+    div.id = `appScriptExtra-${appScriptArchivosExtraCount}`;
+    div.innerHTML = `
+        <label style="font-size: 0.85rem;">Nombre del archivo (ej: Utilidades.gs)</label>
+        <input type="text" class="app-script-extra-name" placeholder="NombreArchivo.gs" style="margin-bottom: 5px;">
+        <textarea class="app-script-textarea app-script-extra-code" placeholder="Pega aquí el código..."></textarea>
+        <button type="button" class="remove-app-script-btn" onclick="eliminarArchivoAppScript('appScriptExtra-${appScriptArchivosExtraCount}')">✖ Quitar</button>
+    `;
+    container.appendChild(div);
+}
+
+// NUEVO: Elimina un grupo de archivo extra de Apps Script
+function eliminarArchivoAppScript(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
 // MODIFICADO: Ahora esta función solo lee las URLs y prepara la primera fase
 async function construirSuperPrompt() {
     const urlInput = document.getElementById('repoUrl')?.value.trim();
@@ -255,10 +307,34 @@ async function construirSuperPrompt() {
 
         // Mostrar vista previa y filtros
         const listaArchivos = document.getElementById('listaArchivos');
+
+// [🔒 CONTINUACIÓN - PARTE 2 DE 2]
         listaArchivos.innerHTML = `<div class="repo-section-title">📂 Principal (${datosRepoPrincipal.repo}): <span style="color:#94a3b8; font-weight:400;">${arbolArchivosPrincipal.length} archivos encontrados</span></div>`;
         
         if (arbolArchivosSecundario.length > 0) {
             listaArchivos.innerHTML += `<div class="repo-section-title" style="margin-top:15px;">📂 Secundario (${datosRepoSecundario.repo}): <span style="color:#94a3b8; font-weight:400;">${arbolArchivosSecundario.length} archivos encontrados</span></div>`;
+        }
+
+        // NUEVO: Renderizar listado COMPLETO de archivos (incluidos excluidos)
+        const fullTreeList = document.getElementById('fullFileTreeList');
+        const fullTreeContainer = document.getElementById('fullFileTreeContainer');
+        if (fullTreeList && fullTreeContainer) {
+            let treeText = "";
+            const marcarExcluido = (path) => {
+                const ext = path.includes('.') ? '.' + path.split('.').pop().toLowerCase() : '(sin extensión)';
+                return EXTENSIONES_EXCLUIDAS_DEFECTO.includes(ext) ? ' [EXCLUIDO POR DEFECTO]' : '';
+            };
+            
+            treeText += `--- Principal (${datosRepoPrincipal.repo}) ---\n`;
+            arbolArchivosPrincipal.forEach(f => treeText += `${f.path}${marcarExcluido(f.path)}\n`);
+            
+            if (arbolArchivosSecundario.length > 0) {
+                treeText += `\n--- Secundario (${datosRepoSecundario.repo}) ---\n`;
+                arbolArchivosSecundario.forEach(f => treeText += `${f.path}${marcarExcluido(f.path)}\n`);
+            }
+            
+            fullTreeList.innerText = treeText;
+            fullTreeContainer.style.display = 'block';
         }
 
         status.innerText = "✅ Estructura leída. Selecciona los tipos de archivo y haz clic en 'Aplicar Filtros'.";
@@ -322,17 +398,57 @@ async function aplicarFiltrosYGenerar() {
         return;
     }
 
+    // NUEVO: Recolectar código de Google Apps Script si existe
+    let bloquesAppScript = [];
+    const gsUrl = document.getElementById('googleSheetUrl')?.value.trim();
+    const gsCodePrincipal = document.getElementById('appScriptCode')?.value.trim();
+    
+    if (gsUrl && gsCodePrincipal) {
+        let bloqueGS = `\n=========================================\n`;
+        bloqueGS += `GOOGLE APPS SCRIPT (URL: ${gsUrl})\n`;
+        bloqueGS += `ARCHIVO: Código.gs\n`;
+        bloqueGS += `=========================================\n`;
+        bloqueGS += `${gsCodePrincipal}\n`;
+        bloquesAppScript.push(bloqueGS);
+
+        // Recoger archivos extra
+        const extras = document.querySelectorAll('.app-script-extra-name');
+        extras.forEach((inputName, index) => {
+            const name = inputName.value.trim() || `Extra_${index + 1}.gs`;
+            const codeArea = inputName.parentElement.querySelector('.app-script-extra-code');
+            const code = codeArea ? codeArea.value.trim() : '';
+            
+            if (code) {
+                let bloqueExtra = `\n=========================================\n`;
+                bloqueExtra += `GOOGLE APPS SCRIPT (URL: ${gsUrl})\n`;
+                bloqueExtra += `ARCHIVO: ${name}\n`;
+                bloqueExtra += `=========================================\n`;
+                bloqueExtra += `${code}\n`;
+                bloquesAppScript.push(bloqueExtra);
+            }
+        });
+    }
+
+    const totalArchivos = archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length + bloquesAppScript.length;
     status.style.color = "#38bdf8";
-    status.innerText = `⏳ Descargando contenido de ${archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length} archivos...`;
+    status.innerText = `⏳ Descargando contenido de ${totalArchivos} elementos (${bloquesAppScript.length} Apps Script, ${archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length} GitHub)...`;
 
     try {
-        // 3. Descargar contenidos
-        let todosLosBloquesArchivos = [];
+        // 3. Descargar contenidos (Inyectamos los de Apps Script al principio)
+        let todosLosBloquesArchivos = [...bloquesAppScript];
         let htmlPreviewArchivos = "";
+
+        if (bloquesAppScript.length > 0) {
+            htmlPreviewArchivos += `<div class="repo-section-title">📜 Google Apps Script (Incluidos):</div>`;
+            htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--green);">📄 Código.gs</span>`;
+            document.querySelectorAll('.app-script-extra-name').forEach(inp => {
+                if (inp.value.trim()) htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--green);">📄 ${inp.value.trim()}</span>`;
+            });
+        }
 
         const resPrincipal = await descargarContenidos(archivosPrincipalesFiltrados, configReposGlobal.datosRepoPrincipal, true);
         todosLosBloquesArchivos = todosLosBloquesArchivos.concat(resPrincipal.bloques);
-        htmlPreviewArchivos += `<div class="repo-section-title">📂 Principal (Incluidos):</div>`;
+        htmlPreviewArchivos += `<div class="repo-section-title" style="margin-top:15px;">📂 Principal (Incluidos):</div>`;
         htmlPreviewArchivos += resPrincipal.nombres.map(name => `<span class="file-tag">📄 ${name}</span>`).join('');
 
         if (archivosSecundariosFiltrados.length > 0) {
