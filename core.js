@@ -182,21 +182,38 @@ async function aplicarFiltrosYGenerar() {
         });
     }
 
+    // NUEVO: Inyectar bloque de CSV si se ha subido un archivo
+    if (csvFileData) {
+        const csvFileName = document.getElementById('csvFileUpload')?.files[0]?.name || 'datos_exportados.csv';
+        let bloqueCsv = `\n=========================================\n`;
+        bloqueCsv += `DATOS EXPORTADOS DEL SPREADSHEET\n`;
+        bloqueCsv += `ARCHIVO: ${csvFileName}\n`;
+        bloqueCsv += `=========================================\n`;
+        bloqueCsv += `${csvFileData}\n`;
+        bloquesAppScript.push(bloqueCsv); // Se añade al bloque de contexto de Apps Script
+    }
+    // FIN NUEVO: Inyección CSV
+
     const totalArchivos = archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length + bloquesAppScript.length;
     status.style.color = "#38bdf8";
-    status.innerText = `⏳ Descargando contenido de ${totalArchivos} elementos (${bloquesAppScript.length} Apps Script, ${archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length} GitHub)...`;
+    status.innerText = `⏳ Descargando contenido de ${totalArchivos} elementos (${bloquesAppScript.length} Apps Script/CSV, ${archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length} GitHub)...`;
 
     try {
-        // MODIFICADO: Inyectar primero el Mapa Global, luego Apps Script, luego GitHub
+        // MODIFICADO: Inyectar primero el Mapa Global, luego Apps Script/CSV, luego GitHub
         let todosLosBloquesArchivos = [mapaArchivosBloque, ...bloquesAppScript];
         let htmlPreviewArchivos = "";
 
         if (bloquesAppScript.length > 0) {
-            htmlPreviewArchivos += `<div class="repo-section-title">📜 Google Apps Script (Incluidos al inicio):</div>`;
+            htmlPreviewArchivos += `<div class="repo-section-title">📜 Google Apps Script / Datos (Incluidos al inicio):</div>`;
             htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--green);">📄 Código.gs</span>`;
             document.querySelectorAll('.app-script-extra-name').forEach(inp => {
                 if (inp.value.trim()) htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--green);">📄 ${inp.value.trim()}</span>`;
             });
+            // NUEVO: Mostrar tag del CSV en la vista previa
+            if (csvFileData) {
+                const csvFileName = document.getElementById('csvFileUpload')?.files[0]?.name || 'datos_exportados.csv';
+                htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--danger);">📊 ${csvFileName}</span>`;
+            }
         }
 
         const resPrincipal = await descargarContenidos(archivosPrincipalesFiltrados, configReposGlobal.datosRepoPrincipal, true);
