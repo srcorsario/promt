@@ -184,6 +184,32 @@
         .copy-part-btn.copied { background: var(--green); }
         .copy-all-btn { background: var(--green); width: 100%; margin-bottom: 15px; }
         .copy-all-btn:hover { background: #059669; }
+
+        /* NUEVO: Estilos para la sección de Google Apps Script */
+        .app-script-file-group {
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .app-script-textarea {
+            height: 120px !important;
+            margin-bottom: 5px !important;
+        }
+        .remove-app-script-btn {
+            position: absolute;
+            top: 25px;
+            right: 10px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .remove-app-script-btn:hover {
+            background: #dc2626;
+        }
     </style>
 </head>
 <body>
@@ -236,6 +262,29 @@
             <input type="text" id="repoUrlSecundario" placeholder="Ej: https://github.com/usuario/proyecto_referencia">
         </div>
         
+        <!-- NUEVO: Sección Google Sheets -->
+        <div class="input-vertical-group">
+            <label for="googleSheetUrl">URL de Google Sheets (Opcional)</label>
+            <input type="text" id="googleSheetUrl" placeholder="Ej: https://docs.google.com/spreadsheets/d/..." oninput="toggleGoogleSheetSection()">
+        </div>
+        
+        <div id="googleSheetSection" style="display: none; margin-bottom: 20px; padding: 15px; background: #0f172a; border: 1px dashed var(--accent); border-radius: 8px;">
+            <label style="color: var(--accent); font-size: 0.95rem;">📜 Pega aquí el código de tus archivos de Google Apps Script</label>
+            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">Estos archivos se añadirán al contexto del prompt junto con el código de GitHub.</p>
+            
+            <div class="app-script-file-group">
+                <label for="appScriptCode" style="font-size: 0.85rem;">Código.gs</label>
+                <textarea id="appScriptCode" class="app-script-textarea" placeholder="Pega aquí el contenido de Código.gs..."></textarea>
+            </div>
+
+            <div id="appScriptExtraFiles">
+                <!-- Archivos extra de Apps Script se inyectarán aquí -->
+            </div>
+
+            <button type="button" class="copy-part-btn" style="background: #334155; color: white; margin-top: 5px;" onclick="añadirArchivoAppScript()">➕ Añadir otro archivo .gs</button>
+        </div>
+        <!-- FIN NUEVO: Sección Google Sheets -->
+
         <label for="instrucciones">¿Qué le vas a pedir a la IA? (Escribe tu Prompt aquí)</label>
         <textarea id="instrucciones" placeholder="Ej: Implementa la lógica solicitada o selecciona una 'Orden Prefijada' arriba..."></textarea>
         
@@ -250,6 +299,14 @@
         <label>Archivos detectados en el repositorio:</label>
         <div id="listaArchivos"></div>
         
+        <!-- NUEVO: Listado completo de archivos -->
+        <div id="fullFileTreeContainer" style="display:none; margin-top: 15px;">
+            <label style="color: var(--green); font-size: 0.9rem;">🗂️ Listado completo de archivos en el repositorio (Incluyendo excluidos por defecto)</label>
+            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">Esto ayuda a la IA a saber que existen, aunque no se copie su contenido para ahorrar tokens.</p>
+            <div id="fullFileTreeList" style="background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; max-height: 250px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #94a3b8; white-space: pre-wrap; line-height: 1.4;"></div>
+        </div>
+        <!-- FIN NUEVO: Listado completo de archivos -->
+
         <!-- NUEVA SECCIÓN: FILTRO DE EXTENSIONES -->
         <div id="filterSection" style="margin-top: 20px; display: none;">
             <label style="color: var(--accent); font-size: 1rem;">⚙️ Filtrar tipos de archivo a incluir</label>
