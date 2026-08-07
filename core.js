@@ -128,6 +128,31 @@ async function aplicarFiltrosYGenerar() {
         return;
     }
 
+    // NUEVO: Generar bloque de Mapa Global de Archivos para inyectar al prompt
+    let mapaArchivosBloque = `\n=========================================\n`;
+    mapaArchivosBloque += `MAPA GLOBAL DE ARCHIVOS DEL REPOSITORIO (Solo lectura/referencia)\n`;
+    mapaArchivosBloque += `=========================================\n`;
+    mapaArchivosBloque += `NOTA: Los archivos marcados como [EXCLUIDO DEL CÓDIGO] no se incluyen en el prompt para ahorrar tokens, pero existen físicamente en el repositorio. Úsalos para verificar dependencias, rutas o nombres de archivos.\n\n`;
+
+    if (arbolArchivosPrincipal.length > 0) {
+        mapaArchivosBloque += `--- Principal (${configReposGlobal.datosRepoPrincipal.repo}) ---\n`;
+        arbolArchivosPrincipal.forEach(f => {
+            const ext = f.path.includes('.') ? '.' + f.path.split('.').pop().toLowerCase() : '(sin extensión)';
+            const estaExcluido = EXTENSIONES_EXCLUIDAS_DEFECTO.includes(ext) || f.path.endsWith('package-lock.json');
+            mapaArchivosBloque += `${estaExcluido ? '[EXCLUIDO DEL CÓDIGO] ' : ''}${f.path}\n`;
+        });
+    }
+
+    if (arbolArchivosSecundario.length > 0) {
+        mapaArchivosBloque += `\n--- Secundario (${configReposGlobal.datosRepoSecundario.repo}) ---\n`;
+        arbolArchivosSecundario.forEach(f => {
+            const ext = f.path.includes('.') ? '.' + f.path.split('.').pop().toLowerCase() : '(sin extensión)';
+            const estaExcluido = EXTENSIONES_EXCLUIDAS_DEFECTO.includes(ext) || f.path.endsWith('package-lock.json');
+            mapaArchivosBloque += `${estaExcluido ? '[EXCLUIDO DEL CÓDIGO] ' : ''}${f.path}\n`;
+        });
+    }
+    // FIN NUEVO: Mapa Global
+
     let bloquesAppScript = [];
     const gsUrl = document.getElementById('googleSheetUrl')?.value.trim();
     const gsCodePrincipal = document.getElementById('appScriptCode')?.value.trim();
@@ -162,7 +187,8 @@ async function aplicarFiltrosYGenerar() {
     status.innerText = `⏳ Descargando contenido de ${totalArchivos} elementos (${bloquesAppScript.length} Apps Script, ${archivosPrincipalesFiltrados.length + archivosSecundariosFiltrados.length} GitHub)...`;
 
     try {
-        let todosLosBloquesArchivos = [...bloquesAppScript];
+        // MODIFICADO: Inyectar primero el Mapa Global, luego Apps Script, luego GitHub
+        let todosLosBloquesArchivos = [mapaArchivosBloque, ...bloquesAppScript];
         let htmlPreviewArchivos = "";
 
         if (bloquesAppScript.length > 0) {
