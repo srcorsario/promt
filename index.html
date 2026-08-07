@@ -98,6 +98,29 @@
             font-family: inherit;
             margin-bottom: 10px;
         }
+        /* NUEVO: Estilo específico para input de archivo */
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            background: #0f172a;
+            border: 1px dashed var(--green);
+            border-radius: 8px;
+            color: white;
+            font-family: inherit;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+        input[type="file"]::file-selector-button {
+            background: var(--green);
+            color: #0f172a;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-right: 15px;
+        }
         select { cursor: pointer; }
         
         /* Selectores pequeños específicos de herramientas superiores */
@@ -264,13 +287,11 @@
         
         <!-- NUEVO: Sección Google Sheets -->
         <div class="input-vertical-group">
-            <!-- MODIFICADO: Texto aclaratorio en la etiqueta -->
             <label for="googleSheetUrl">URL del Spreadsheet / Proyecto (Solo como contexto para la IA)</label>
             <input type="text" id="googleSheetUrl" placeholder="Ej: https://docs.google.com/spreadsheets/d/..." oninput="toggleGoogleSheetSection()">
         </div>
         
         <div id="googleSheetSection" style="display: none; margin-bottom: 20px; padding: 15px; background: #0f172a; border: 1px dashed var(--accent); border-radius: 8px;">
-            <!-- MODIFICADO: Texto aclaratorio sobre pegar código manualmente -->
             <label style="color: var(--accent); font-size: 0.95rem;">📜 Pega aquí el código fuente de tus archivos (.gs, .html, .js)</label>
             <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">La URL de arriba no se descarga automáticamente. Pega el contenido de tus archivos aquí para inyectarlos al prompt.</p>
             
@@ -284,6 +305,16 @@
             </div>
 
             <button type="button" class="copy-part-btn" style="background: #334155; color: white; margin-top: 5px;" onclick="añadirArchivoAppScript()">➕ Añadir otro archivo</button>
+
+            <!-- NUEVO: Sección de subida de CSV -->
+            <div style="margin-top: 20px; border-top: 1px solid #334155; padding-top: 15px;">
+                <label style="color: var(--green); font-size: 0.95rem;">📊 Subir archivo exportado de la hoja (CSV / TSV / TXT)</label>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">Opcional. Previene alucinaciones dándole los datos reales a la IA. <strong>Precaución:</strong> Si el archivo es muy grande, se dividirá en múltiples partes.</p>
+                <input type="file" id="csvFileUpload" accept=".csv,.tsv,.txt">
+                <div id="csvFileInfo" style="font-size: 0.85rem; color: var(--green); margin-top: 5px; display: none;"></div>
+            </div>
+            <!-- FIN NUEVO: Sección de subida de CSV -->
+
         </div>
         <!-- FIN NUEVO: Sección Google Sheets -->
 
