@@ -1,9 +1,3 @@
-// [🔒 ARCHIVO DIVIDIDO - PARTE 1 DE 2]
-// =========================================
-// REPOSITORIO: promt (PRINCIPAL)
-// ARCHIVO: app.js
-// =========================================
-// [🔒 ARCHIVO DIVIDIDO - TOTALIDAD COMPLETA SIN CORTES]
 const VER_APP = "3.0.0"; // Actualizado a v3 por cambio de arquitectura (Trees API + Filtros)
 
 let promptsFinalesListos = [];
@@ -243,9 +237,10 @@ function añadirArchivoAppScript() {
     const div = document.createElement('div');
     div.className = 'app-script-file-group';
     div.id = `appScriptExtra-${appScriptArchivosExtraCount}`;
+    // MODIFICADO: Placeholder genérico
     div.innerHTML = `
-        <label style="font-size: 0.85rem;">Nombre del archivo (ej: Utilidades.gs)</label>
-        <input type="text" class="app-script-extra-name" placeholder="NombreArchivo.gs" style="margin-bottom: 5px;">
+        <label style="font-size: 0.85rem;">Nombre del archivo (ej: Index.html, Utils.gs)</label>
+        <input type="text" class="app-script-extra-name" placeholder="Nombre del archivo" style="margin-bottom: 5px;">
         <textarea class="app-script-textarea app-script-extra-code" placeholder="Pega aquí el código..."></textarea>
         <button type="button" class="remove-app-script-btn" onclick="eliminarArchivoAppScript('appScriptExtra-${appScriptArchivosExtraCount}')">✖ Quitar</button>
     `;
@@ -307,8 +302,6 @@ async function construirSuperPrompt() {
 
         // Mostrar vista previa y filtros
         const listaArchivos = document.getElementById('listaArchivos');
-
-// [🔒 CONTINUACIÓN - PARTE 2 DE 2]
         listaArchivos.innerHTML = `<div class="repo-section-title">📂 Principal (${datosRepoPrincipal.repo}): <span style="color:#94a3b8; font-weight:400;">${arbolArchivosPrincipal.length} archivos encontrados</span></div>`;
         
         if (arbolArchivosSecundario.length > 0) {
@@ -398,14 +391,14 @@ async function aplicarFiltrosYGenerar() {
         return;
     }
 
-    // NUEVO: Recolectar código de Google Apps Script si existe
+    // NUEVO: Recolectar código de Google Apps Script si existe (Se inyectará al principio para dar visión global)
     let bloquesAppScript = [];
     const gsUrl = document.getElementById('googleSheetUrl')?.value.trim();
     const gsCodePrincipal = document.getElementById('appScriptCode')?.value.trim();
     
     if (gsUrl && gsCodePrincipal) {
         let bloqueGS = `\n=========================================\n`;
-        bloqueGS += `GOOGLE APPS SCRIPT (URL: ${gsUrl})\n`;
+        bloqueGS += `GOOGLE APPS SCRIPT (URL Referencia: ${gsUrl})\n`;
         bloqueGS += `ARCHIVO: Código.gs\n`;
         bloqueGS += `=========================================\n`;
         bloqueGS += `${gsCodePrincipal}\n`;
@@ -420,7 +413,7 @@ async function aplicarFiltrosYGenerar() {
             
             if (code) {
                 let bloqueExtra = `\n=========================================\n`;
-                bloqueExtra += `GOOGLE APPS SCRIPT (URL: ${gsUrl})\n`;
+                bloqueExtra += `GOOGLE APPS SCRIPT (URL Referencia: ${gsUrl})\n`;
                 bloqueExtra += `ARCHIVO: ${name}\n`;
                 bloqueExtra += `=========================================\n`;
                 bloqueExtra += `${code}\n`;
@@ -439,7 +432,7 @@ async function aplicarFiltrosYGenerar() {
         let htmlPreviewArchivos = "";
 
         if (bloquesAppScript.length > 0) {
-            htmlPreviewArchivos += `<div class="repo-section-title">📜 Google Apps Script (Incluidos):</div>`;
+            htmlPreviewArchivos += `<div class="repo-section-title">📜 Google Apps Script (Incluidos al inicio):</div>`;
             htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--green);">📄 Código.gs</span>`;
             document.querySelectorAll('.app-script-extra-name').forEach(inp => {
                 if (inp.value.trim()) htmlPreviewArchivos += `<span class="file-tag" style="border-left: 3px solid var(--green);">📄 ${inp.value.trim()}</span>`;
@@ -697,4 +690,3 @@ function copiarTodoElPrompt() {
         if (btnAll) { btnAll.innerText = "✅ ¡TODO COPIADO!"; setTimeout(() => btnAll.innerText = "📄 COPIAR TODO EN UNO", 3000); }
     }).catch(err => { console.error('Error al copiar:', err); alert("Error al copiar todo."); });
 }
-// [🔒 FIN DE ARCHIVO DIVIDIDO - TOTALIDAD COMPLETA EN UN SÓLO BLOQUE DE SALIDA]
