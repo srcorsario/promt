@@ -264,13 +264,15 @@
         
         <!-- NUEVO: Sección Google Sheets -->
         <div class="input-vertical-group">
-            <label for="googleSheetUrl">URL de Google Sheets (Opcional)</label>
+            <!-- MODIFICADO: Texto aclaratorio en la etiqueta -->
+            <label for="googleSheetUrl">URL del Spreadsheet / Proyecto (Solo como contexto para la IA)</label>
             <input type="text" id="googleSheetUrl" placeholder="Ej: https://docs.google.com/spreadsheets/d/..." oninput="toggleGoogleSheetSection()">
         </div>
         
         <div id="googleSheetSection" style="display: none; margin-bottom: 20px; padding: 15px; background: #0f172a; border: 1px dashed var(--accent); border-radius: 8px;">
-            <label style="color: var(--accent); font-size: 0.95rem;">📜 Pega aquí el código de tus archivos de Google Apps Script</label>
-            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">Estos archivos se añadirán al contexto del prompt junto con el código de GitHub.</p>
+            <!-- MODIFICADO: Texto aclaratorio sobre pegar código manualmente -->
+            <label style="color: var(--accent); font-size: 0.95rem;">📜 Pega aquí el código fuente de tus archivos (.gs, .html, .js)</label>
+            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; margin-bottom: 10px;">La URL de arriba no se descarga automáticamente. Pega el contenido de tus archivos aquí para inyectarlos al prompt.</p>
             
             <div class="app-script-file-group">
                 <label for="appScriptCode" style="font-size: 0.85rem;">Código.gs</label>
@@ -281,7 +283,7 @@
                 <!-- Archivos extra de Apps Script se inyectarán aquí -->
             </div>
 
-            <button type="button" class="copy-part-btn" style="background: #334155; color: white; margin-top: 5px;" onclick="añadirArchivoAppScript()">➕ Añadir otro archivo .gs</button>
+            <button type="button" class="copy-part-btn" style="background: #334155; color: white; margin-top: 5px;" onclick="añadirArchivoAppScript()">➕ Añadir otro archivo</button>
         </div>
         <!-- FIN NUEVO: Sección Google Sheets -->
 
@@ -314,7 +316,6 @@
             <div id="extensionFilters" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; max-height: 300px; overflow-y: auto;">
                 <!-- Los checkboxes se inyectarán aquí desde JavaScript -->
             </div>
-            <!-- MODIFICADO: Añadido id="btnAplicarFiltros" para control de estado -->
             <button id="btnAplicarFiltros" class="copy-all-btn" style="margin-top: 15px;" onclick="aplicarFiltrosYGenerar()">🔄 Aplicar Filtros y Generar Prompts</button>
         </div>
         <!-- FIN NUEVA SECCIÓN -->
