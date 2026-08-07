@@ -14,6 +14,30 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const limitGuardado = localStorage.getItem('last_limit_select');
     if (limitGuardado) document.getElementById('limitSelect').value = limitGuardado;
+
+    // NUEVO: Listener para leer el archivo CSV subido localmente
+    const csvUpload = document.getElementById('csvFileUpload');
+    if (csvUpload) {
+        csvUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) { 
+                csvFileData = null; 
+                const info = document.getElementById('csvFileInfo');
+                if (info) info.style.display = 'none';
+                return; 
+            }
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                csvFileData = ev.target.result;
+                const info = document.getElementById('csvFileInfo');
+                if (info) {
+                    info.innerText = `✅ Cargado: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                    info.style.display = 'block';
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
 });
 
 function aplicarOrdenPrefijada(clavePlantilla) {
@@ -53,6 +77,13 @@ function limpiarInterfaz() {
     if (gsExtras) gsExtras.innerHTML = '';
     appScriptArchivosExtraCount = 0;
     
+    // NUEVO: Limpiar estado del CSV
+    csvFileData = null;
+    const csvUpload = document.getElementById('csvFileUpload');
+    if (csvUpload) csvUpload.value = '';
+    const csvInfo = document.getElementById('csvFileInfo');
+    if (csvInfo) csvInfo.style.display = 'none';
+
     const fullTreeContainer = document.getElementById('fullFileTreeContainer');
     if (fullTreeContainer) fullTreeContainer.style.display = 'none';
 
